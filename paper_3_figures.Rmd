@@ -1,0 +1,4317 @@
+---
+title: 'Paper 3 possibilities'
+author: "Anya Leenman"
+output:
+  html_document:
+    number_sections: no
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+# Housekeeping
+rm(list = ls())
+
+library(dplyr)
+library(lubridate)
+library(scales)
+library(colorspace)
+library(RColorBrewer)
+library(raster)
+library(RStoolbox)
+
+drive1 <- "E"
+drive2 <- "D"
+
+colz = c("black", brewer.pal(4, "Set1"))
+
+# location to save all files from this document
+outfiles <- paste0(drive2, ":/Experiments/writing/3_feed_duration/figures")
+
+```
+Nov 2020.
+
+Initial plots for third paper with constant feed, varied sediment supply. Trying to decide if I should compare runs 1-6-7 or runs 1-7-8-9...
+
+Runs 1, 6 and 7 (varying amplitude of feed variations) compared with runs 1, 7, 8 and 9 (varying duration of on/off phases) - analogous to varying period but holding amplitude constant.
+
+# Feed rates:
+```{r, echo = F}
+# plot of feed rates.
+#-----------
+# generate time series of feed rates:
+run1 <- data.frame(
+  minz = 1:40,
+  feed = 5
+)
+
+run6 <- data.frame(
+  minz = 1:40,
+  feed = rep(c(rep(6.66, 5), rep(3.33, 5)), 4)
+)
+
+run7 <- data.frame(
+  minz = 1:40,
+  feed = rep(c(rep(10, 5), rep(0, 5)), 4)
+)
+
+run8 <- data.frame(
+  minz = 1:40,
+  feed = rep(c(rep(10, 10), rep(0, 10)), 2)
+)
+
+run9 <- data.frame(
+  minz = 1:40,
+  feed = c(rep(10, 20), rep(0, 20))
+)
+#-------------
+# # plot first set:
+# plot(run1,
+#      type = "l",
+#      col = colz[1],
+#      xlab = "Time in cycle (minutes)",
+#      ylab = "Feed rate (g/s)",
+#      ylim = c(0, 10),
+#      lwd = 2)
+# lines(run6,
+#       col = colz[2],
+#       lwd = 2)
+# lines(run7,
+#       col = colz[3],
+#       lwd = 2)
+# legend("topright", 
+#        legend = c("Run 1", "Run 6", "Run 7"),
+#        col = colz[1:3],
+#        lwd = 2)
+#--------------------
+# plot second set:
+pdf(paste0(outfiles, "/feed_rates.pdf"),
+     width = 6, height = 4)
+par(mfrow = c(3, 1),
+    mai = c(.3,.3,0.1,0.1),
+    oma = c(2, 2, 3, 0),
+    xpd = NA)
+plot(run1,
+     type = "l",
+     col = colz[1],
+     xlab = "",
+     ylab = "",
+     ylim = c(0, 10),
+     lwd = 2)
+lines(run7,
+      col = colz[3],
+      lwd = 2)
+
+legend(10, 16,
+       bty = "n",
+       ncol = 4,
+       legend = c("Run 1", "Run 7", "Run 8", "Run 9"),
+       col = colz[c(1, 3:5)],
+       lwd = 2)
+
+plot(run1,
+     type = "l",
+     col = colz[1],
+     xlab = "",
+     ylab = "",
+     ylim = c(0, 10),
+     lwd = 2)
+lines(run8,
+      col = colz[4],
+      lwd = 2)
+plot(run1,
+     type = "l",
+     col = colz[1],
+     xlab = "",
+     ylab = "",
+     ylim = c(0, 10),
+     lwd = 2)
+lines(run9,
+      col = colz[5],
+      lwd = 2)
+
+mtext(text = "Time in experiment (minutes)", side = 1, outer = T, line = 0)
+mtext(text = "Feed rate (g/s)", side = 2, outer = T, line = 0)
+dev.off()
+```
+
+
+# Median fan slope:
+<!-- Data wrangling: -->
+```{r, include=FALSE}
+
+# import slope data for each run
+#----------------
+run <- 1
+repe <- 2
+run1 <- read.csv(
+  paste0(drive1, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, 
+         "/_1min_intervals/t_series/Recalculating_slope/Slope_length_curv.csv")) %>%
+  dplyr::select(tvec, contains("slope")) %>% # select relevant variables
+  mutate(t_h = ifelse((tvec %% 100) == 0, tvec / 100, floor (tvec / 100))) %>% # get hour
+  mutate(t_m = ifelse((tvec %% 100) == 0, 0, tvec - t_h * 100)) %>% # get minute
+  mutate(time = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
+  mutate(time = hm(time)) %>% # convert to time format using lubridate
+  mutate(t_sec = period_to_seconds(time)) %>% # Convert to number of seconds since start
+  mutate(t_min = t_sec / 60) %>% # time in minutes
+  mutate(t_hr = t_min / 60) %>% # time in hours
+  dplyr::select(-time, -t_h, -t_m) %>% # remove unnecessary columns
+  #filter(complete.cases(.)) %>% # get rid of rows with NA.
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+  mutate(run = run)
+
+run <- 6
+repe <- 1
+run6 <- read.csv(
+  paste0(drive2, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, 
+         "/_1min_intervals/t_series/Recalculating_slope/Slope_length_curv.csv"))%>%
+  dplyr::select(tvec, contains("slope")) %>%
+  mutate(t_h = ifelse((tvec %% 100) == 0, tvec / 100, floor (tvec / 100))) %>% # get hour
+  mutate(t_m = ifelse((tvec %% 100) == 0, 0, tvec - t_h * 100)) %>% # get minute
+  mutate(time = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
+  mutate(time = hm(time)) %>% # convert to time format using lubridate
+  mutate(t_sec = period_to_seconds(time)) %>% # Convert to number of seconds since start
+  mutate(t_min = t_sec / 60) %>% # time in minutes
+  mutate(t_hr = t_min / 60) %>% # time in hours
+  dplyr::select(-time, -t_h, -t_m) %>% # remove unnecessary columns
+  #filter(complete.cases(.)) %>% # get rid of rows with NA.
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+  mutate(run = run)
+run <- 7
+run7 <- read.csv(
+  paste0(drive2, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, 
+         "/_1min_intervals/t_series/Recalculating_slope/Slope_length_curv.csv"))%>%
+  dplyr::select(tvec, contains("slope")) %>%
+  mutate(t_h = ifelse((tvec %% 100) == 0, tvec / 100, floor (tvec / 100))) %>% # get hour
+  mutate(t_m = ifelse((tvec %% 100) == 0, 0, tvec - t_h * 100)) %>% # get minute
+  mutate(time = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
+  mutate(time = hm(time)) %>% # convert to time format using lubridate
+  mutate(t_sec = period_to_seconds(time)) %>% # Convert to number of seconds since start
+  mutate(t_min = t_sec / 60) %>% # time in minutes
+  mutate(t_hr = t_min / 60) %>% # time in hours
+  dplyr::select(-time, -t_h, -t_m) %>% # remove unnecessary columns
+  #filter(complete.cases(.)) %>% # get rid of rows with NA.
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+  mutate(run = run)
+run <- 8
+run8 <- read.csv(
+  paste0(drive2, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, 
+         "/_1min_intervals/t_series/Recalculating_slope/Slope_length_curv.csv"))%>%
+  dplyr::select(tvec, contains("slope")) %>%
+  mutate(t_h = ifelse((tvec %% 100) == 0, tvec / 100, floor (tvec / 100))) %>% # get hour
+  mutate(t_m = ifelse((tvec %% 100) == 0, 0, tvec - t_h * 100)) %>% # get minute
+  mutate(time = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
+  mutate(time = hm(time)) %>% # convert to time format using lubridate
+  mutate(t_sec = period_to_seconds(time)) %>% # Convert to number of seconds since start
+  mutate(t_min = t_sec / 60) %>% # time in minutes
+  mutate(t_hr = t_min / 60) %>% # time in hours
+  dplyr::select(-time, -t_h, -t_m) %>% # remove unnecessary columns
+  #filter(complete.cases(.)) %>% # get rid of rows with NA.
+  # divide into 20 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
+  mutate(run = run)
+run <- 9
+run9 <- read.csv(
+  paste0(drive2, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, "/_1min_intervals/t_series/Recalculating_slope/Slope_length_curv.csv"))%>%
+  dplyr::select(tvec, contains("slope")) %>%
+  mutate(t_h = ifelse((tvec %% 100) == 0, tvec / 100, floor (tvec / 100))) %>% # get hour
+  mutate(t_m = ifelse((tvec %% 100) == 0, 0, tvec - t_h * 100)) %>% # get minute
+  mutate(time = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
+  mutate(time = hm(time)) %>% # convert to time format using lubridate
+  mutate(t_sec = period_to_seconds(time)) %>% # Convert to number of seconds since start
+  mutate(t_min = t_sec / 60) %>% # time in minutes
+  mutate(t_hr = t_min / 60) %>% # time in hours
+  dplyr::select(-time, -t_h, -t_m) %>% # remove unnecessary columns
+  #filter(complete.cases(.)) %>% # get rid of rows with NA.
+  # divide into 40 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
+  mutate(run = run)
+
+slope_dat <- list(run1, run6, run7, run8, run9)
+slope_df <- bind_rows(slope_dat) #%>%
+  #mutate(run.t = paste(t_min, run, sep = "_"))
+```
+
+Comparing temporal trends in median slope:
+```{r, echo = F, eval = F}
+# plots - 1, 6 and 7 (varying amplitude of feed variations)
+# compared with 1, 8 and 9 (varying duration of on/off phases)
+
+# median slope temporal trend: amplitude
+plot(run1$t_hr, run1$slope_50pc*-1, type = "l",
+     ylim = c(0.05, 0.08),
+     main = "Median slope, varying feed amplitude",
+     xlab = "Time (hrs)",
+     ylab = "Median slope",
+     col = colz[1])
+lines(run6$t_hr, run6$slope_50pc*-1, col = colz[2])
+lines(run7$t_hr, run7$slope_50pc*-1, col = colz[3])
+legend("topleft", legend = c("Run 1", "Run 6", "Run 7"),
+       col = colz[1:3],
+       lty = 1)
+
+# median slope temporal trend: duration
+plot(run1$t_hr, run1$slope_50pc*-1, type = "l",
+     ylim = c(0.05, 0.08),
+     main = "Median slope, varying feed duration",
+     xlab = "Time (hrs)",
+     ylab = "Median slope",
+     col = colz[1])
+lines(run7$t_hr, run7$slope_50pc*-1, col = colz[3])
+lines(run8$t_hr, run8$slope_50pc*-1, col = colz[4])
+lines(run9$t_hr, run9$slope_50pc*-1, col = colz[5])
+legend("topleft", legend = c("Run 1", "Run 7", "Run 8", "Run 9"),
+       col = colz[c(1, 3:5)],
+       lty = 1)
+```
+
+And now boxplots: 
+
+Statistical tests should not be applied: data are temporally autocorrelated. Have tried to reduce impact by sampling every fifth timestep for box plot. If I increase the sampling interval further, I end up only sampling high/low slope periods, which would be misleading.
+```{r, echo = F}
+
+# first, test for autocorrelation in run1:
+mod1 <- lm(run1$slope_50pc * -1 ~ run1$t_min)
+#plot(mod1$residuals, type = "b")
+#acf(residuals(mod1))
+
+# # median slope boxplot 
+# # first for amplitude
+# slope50_1_6_7 <- rbind(run1, run6, run7)
+# boxplot(slope_50pc*-1 ~ run, data = slope50_1_6_7,
+#         main = "median slope, varying amplitude",
+#         col = alpha(colz[1:3], 0.7))
+# test <- pairwise.t.test(slope50_1_6_7$slope_50pc, 
+#                 slope50_1_6_7$run, 
+#                 #p.adjust.method = "bonf",
+#                 pool.sd = FALSE, paired = FALSE)
+# knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# repeat for duration
+# all data
+png(paste0(outfiles, "/slope_boxplot.png"),
+     width = 720, height = 480)
+par(mar = c(4, 5, 1, 1))
+
+slope50_1_7_8_9 <- rbind(run1, run7, run8, run9) %>%
+  filter(t_min <= max(run1$t_min)) # filter so that all runs use same time range
+boxplot(slope_50pc*-1 ~ run, data = slope50_1_7_8_9,
+        #main = "median slope, varying duration, sampling every minute",
+        col = alpha(colz[c(1, 3:5)], 0.7),
+        xlab = "Run",
+        ylab = expression("Median fan slope (m m"^-2*")"),
+        par(cex.lab=1.5, cex.axis=1.5), 
+        outcex = 1.5
+        )
+
+dev.off()
+# test <- pairwise.t.test(slope50_1_7_8_9$slope_50pc, 
+#                         slope50_1_7_8_9$run, 
+#                         p.adjust.method = "bonf",
+#                         pool.sd = FALSE, paired = FALSE)
+# knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# # sample every 5th minute
+# slope50_1_7_8_9 <- rbind(run1, run7, run8, run9) %>%
+#   filter(time_in_cycle %% 5 == 0)
+# boxplot(slope_50pc*-1 ~ run, data = slope50_1_7_8_9,
+#         main = "median slope, varying duration, sampling every 5 minutes",
+#         col = alpha(colz[c(1, 3:5)], 0.7))
+# test <- pairwise.t.test(slope50_1_7_8_9$slope_50pc, 
+#                         slope50_1_7_8_9$run, 
+#                         p.adjust.method = "bonf",
+#                         pool.sd = FALSE, paired = FALSE)
+# knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# # sample randomly
+# slope50_1_7_8_9 <- rbind(run1, run7, run8, run9) %>%
+#   sample_n(., 240)
+# boxplot(slope_50pc*-1 ~ run, data = slope50_1_7_8_9,
+#         main = "median slope, varying duration, sampling 240 obs ",
+#         col = alpha(colz[c(1, 3:5)], 0.7))
+# test <- pairwise.t.test(slope50_1_7_8_9$slope_50pc, 
+#                         slope50_1_7_8_9$run, 
+#                         p.adjust.method = "bonf",
+#                         pool.sd = FALSE, paired = FALSE)
+# knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+```
+
+Temporal trend through low/high feed periods:
+```{r, echo = F}
+# 1) amplitude case----------------
+# par(mfrow = c(1, 3))
+# exps <- list(run1, run6, run7)
+# 
+# for(i in 1:length(exps)){
+#   dat <- exps[[i]]
+#   # blank axes
+#   plot(0:10, 
+#        abs(dat$slope_50pc)[6:16],
+#        type = "n",
+#        xlab = "",
+#        ylab = "",
+#        ylim = c(0.055, 0.08))
+#   
+#   # line to delineate low/high feed
+#   if(i == 2){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.06, "High feed")
+#     text(8, 0.06, "Low feed")
+#   } else if(i == 3){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.06, "V. High feed")
+#     text(8, 0.06, "No feed")
+#   }
+# 
+#   
+#   # add lines for each cycle
+#   for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+#     lines(c(0,
+#             abs(dat$time_in_cycle)[dat$cycle == j]), 
+#           c(abs(dat$slope_50pc)[dat$cycle == (j-1) & dat$time_in_cycle == 10],
+#             abs(dat$slope_50pc)[dat$cycle == j]),
+#           #lwd = 0.5,
+#           col = alpha(colz[i], 0.4))
+#   }
+#   
+#   # get mean for group; add to plot
+#   df2 = group_by(dat, time_in_cycle)
+#   df2m = summarize(df2, mean_of_medians = mean(abs(slope_50pc)))
+#   lines(0:10,
+#         c(pull(df2m[10, 2]), pull(df2m[,2])),
+#         col = darken(colz[i], amount = 0.4, space = "combined"),
+#         lwd = 2)
+#   
+#   # annotations
+#   Run.no <- paste0("R", dat$run[1])
+#   
+#   if(i == 1){
+#     legend("topright",
+#            bty = "n",
+#            legend = c("Single cycle", "Ensemble mean"),
+#            lwd = c(1, 2),
+#            col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+#            title = Run.no,
+#            text.font = 3
+#     )
+#   } else {
+#     legend("topright",
+#            bty = "n",
+#            legend = NA,
+#            title = Run.no
+#     )
+#   }
+# }
+# title(main = "Median slope with varying feed amplitude",
+#       outer = T,
+#       line = -2)
+# mtext(side = 1, text = "Time in cycle (mins)",
+#       outer = T, line = -2)
+# mtext(text = "Median fan slope", side = 2, outer = T, line = -2)
+
+#-------
+# 2) Duration case 
+exps <- list(run1, run7, run8, run9)# experiments to plot
+colz2 <- colz[c(1, 3:5)] # colours to use
+
+png(paste0(outfiles, "/slope_vs_timeincycle.png"),
+     width = 960, height = 480)
+par(mai = c(0.5,0.5,0.1,0.1),
+    oma = c(3, 3, 0, 0))
+layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
+       
+       # set unique subplot width for each experiment
+       widths = c(1, 1, 2, 4)) 
+
+# for each experiment:
+for(i in 1:length(exps)){
+  dat <- exps[[i]] # get data for exp from main list
+  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row 
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)), 
+       abs(dat$slope_50pc)[(start.row-1):end.row], # starting at 0, not 1
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0.055, 0.075), # tweak
+       cex.axis = 2,
+       xaxt = "n")
+  # x-axis intervals
+  axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2) 
+  
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, 0.055, "H-F", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.055, "0-F", cex = 2)
+  }
+  
+  
+  # plot a line for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0, # paste a 0 on the front, so t10 (or t_final) value in prev cycle 
+            # = t0 value in this cycle
+            abs(dat$time_in_cycle)[dat$cycle == j]), 
+          c(abs(dat$slope_50pc)[dat$cycle == (j-1) & dat$time_in_cycle == cycle.len],
+            abs(dat$slope_50pc)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz2[i], 0.4))
+  }
+  
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle) # groups = min 1, min 2... finds mean at each minute
+  df2m = summarize(df2, mean_of_medians = mean(abs(slope_50pc)))
+  lines(0:cycle.len, # paste 0 on front again
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(colz2[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+  
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+  
+  if(i == 4){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz2[i], 0.4), darken(colz2[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3,
+           cex = 2
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no,
+           cex = 2
+    )
+  }
+}
+
+# axis labels for whole plot, not subplots
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = 0, cex = 1.5)
+mtext(text = expression("Median fan slope (m m"^-2*")"), 
+      side = 2, outer = T, line = 0, cex = 1.5)
+
+dev.off()
+
+```
+
+# Lateral instability:
+Did lateral instability rate (Fn) vary between exps?
+
+<!-- data Wrangling -->
+```{r, echo = F}
+# Load Fn data
+run <- 1
+repe <- 2
+run1 <- read.csv(
+    file = paste0(drive1, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+                  repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+                  "_rep", repe, "_lag1_overlap_and_antioverlap.csv")) %>%
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # Assign min in cycle
+  mutate(run = run) %>%
+  dplyr::select(-time)
+
+run <- 6
+repe <- 1
+run6 <- read.csv(
+  file = paste0(drive2, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+                  repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+                  "_rep", repe, "_lag1_overlap_and_antioverlap.csv")) %>%
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+  mutate(run = run) %>%
+  dplyr::select(-time)
+
+run <- 7
+run7 <- read.csv(
+      file = paste0(drive2, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+                  repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+                  "_rep", repe, "_lag1_overlap_and_antioverlap.csv")) %>%
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+  mutate(run = run) %>%
+  dplyr::select(-time)
+
+run <- 8
+run8 <- read.csv(
+      file = paste0(drive2, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+                  repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+                  "_rep", repe, "_lag1_overlap_and_antioverlap.csv")) %>%
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
+  mutate(run = run) %>%
+  dplyr::select(-time)
+
+run <- 9
+run9 <- read.csv(
+      file = paste0(drive2, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+                  repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+                  "_rep", repe, "_lag1_overlap_and_antioverlap.csv")) %>%
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
+  mutate(run = run) %>%
+  dplyr::select(-time)
+
+# plot as above!
+
+fn_list <- list(run1, run6, run7, run8, run9)
+fn_df <- bind_rows(fn_list) #%>%
+  #mutate(run.t = paste(t_min, run, sep = "_"))
+```
+
+Comparing temporal trends in newly inundated area (Fn), expressed as a percentage of fan area:
+```{r, echo = F, eval = F}
+# plots - 1, 6 and 7 (varying amplitude of feed variations)
+# compared with 1, 8 and 9 (varying duration of on/off phases)
+
+# Fn temporal trend: amplitude
+plot(run1$t_hr, run1$new_area_normby_t2_fan * 100, 
+     type = "l",
+     ylim = c(0, 15),
+     main = "Fn, varying feed amplitude",
+     xlab = "Time (hrs)",
+     ylab = "Fn (%)",
+     col = colz[1])
+lines(run6$t_hr, run6$new_area_normby_t2_fan * 100, col = colz[2])
+lines(run7$t_hr, run7$new_area_normby_t2_fan * 100, col = colz[3])
+legend("topleft", legend = c("Run 1", "Run 6", "Run 7"),
+       col = colz[1:3],
+       lty = 1)
+
+# Fn temporal trend: duration
+plot(run1$t_hr, run1$new_area_normby_t2_fan * 100, 
+     type = "l",
+     ylim = c(0, 15),
+     main = "Fn, varying feed duration",
+     xlab = "Time (hrs)",
+     ylab = "Median slope",
+     col = colz[1])
+lines(run7$t_hr, run7$new_area_normby_t2_fan * 100, col = colz[3])
+lines(run8$t_hr, run8$new_area_normby_t2_fan * 100, col = colz[4])
+lines(run9$t_hr, run9$new_area_normby_t2_fan * 100, col = colz[5])
+legend("topleft", legend = c("Run 1", "Run 7", "Run 8", "Run 9"),
+       col = colz[c(1, 3:5)],
+       lty = 1)
+```
+
+<!-- And now boxplots:  -->
+
+<!-- Question reliability of t-tests... -->
+```{r, echo = F, eval = F}
+# Fn boxplot 
+# first for amplitude
+F_1_6_7 <- rbind(run1, run6, run7)
+boxplot(new_area_normby_t2_fan * 100 ~ run, data = F_1_6_7,
+        main = "Fn, varying amplitude",
+        col = alpha(colz[1:3], 0.7))
+test <- pairwise.t.test(F_1_6_7$new_area_normby_t2_fan, 
+                F_1_6_7$run, 
+                #p.adjust.method = "bonf",
+                pool.sd = FALSE, paired = FALSE)
+knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+
+# repeat for duration
+F_1_7_8_9 <- rbind(run1, run7, run8, run9)
+boxplot(new_area_normby_t2_fan * 100 ~ run, data = F_1_7_8_9,
+        main = "Fn, varying duration",
+        col = alpha(colz[c(1, 3:5)], 0.7))
+test <- pairwise.t.test(F_1_7_8_9$new_area_normby_t2_fan, 
+                        F_1_7_8_9$run, 
+                        #p.adjust.method = "bonf",
+                        pool.sd = FALSE, paired = FALSE)
+knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+```
+
+
+Temporal trend through low/high feed periods:
+```{r, echo = F}
+# 1) amplitude case-----
+# par(mfrow = c(1, 3))
+# exps <- list(run1, run6, run7)
+# 
+# for(i in 1:length(exps)){
+#   dat <- exps[[i]]
+#   # blank axes
+#   plot(0:10, 
+#        abs(dat$new_area_normby_t2_fan)[6:16],
+#        type = "n",
+#        xlab = "",
+#        ylab = "",
+#        ylim = c(0, 15))
+#   
+#   # line to delineate low/high feed
+#   if (i == 2){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.06, "High feed")
+#     text(8, 0.06, "Low feed")
+#   } else if (i == 3){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.06, "V. High feed")
+#     text(8, 0.06, "No feed")
+#   }
+# 
+#   
+#   # add lines for each cycle
+#   for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+#     lines(c(0, (dat$time_in_cycle)[dat$cycle == j]), 
+#           c((dat$new_area_normby_t2_fan * 100)[dat$cycle == (j-1) & dat$time_in_cycle == 10],
+#             (dat$new_area_normby_t2_fan * 100)[dat$cycle == j]),
+#           #lwd = 0.5,
+#           col = alpha(colz[i], 0.4))
+#   }
+#   
+#   # get mean for group; add to plot
+#   df2 = group_by(dat, time_in_cycle)
+#   df2m = summarize(df2, mean_of_medians = mean(new_area_normby_t2_fan) * 100)
+#   lines(0:10,
+#         c(pull(df2m[10, 2]), pull(df2m[,2])),
+#         col = darken(colz[i], amount = 0.4, space = "combined"),
+#         lwd = 2)
+#   
+#   # annotations
+#   Run.no <- paste0("R", dat$run[1])
+#   
+#   if(i == 1){
+#     legend("topright",
+#            bty = "n",
+#            legend = c("Single cycle", "Ensemble mean"),
+#            lwd = c(1, 2),
+#            col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+#            title = Run.no,
+#            text.font = 3
+#     )
+#   } else {
+#     legend("topright",
+#            bty = "n",
+#            legend = NA,
+#            title = Run.no
+#     )
+#   }
+# }
+# title(main = "Fn with varying feed amplitude",
+#       outer = T,
+#       line = -2)
+# mtext(side = 1, text = "Time in cycle (mins)",
+#       outer = T, line = -2)
+# mtext(text = "Fn (%)", side = 2, outer = T, line = -2)
+
+#-------
+# 2) Duration case
+exps <- list(run1, run7, run8, run9)
+colz2 <- colz[c(1, 3:5)]
+alphas <- c(0.2, rep(0.4, 3)) # set alpha for run 1 slightly lower
+
+png(paste0(outfiles, "/Fn_vs_timeincycle.png"),
+     width = 960, height = 480)
+par(mai = c(0.5,0.5,0.1,0.1),
+    oma = c(3, 3, 0, 0))
+layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
+       widths = c(1, 1, 2, 4))
+
+for(i in 1:length(exps)){
+  dat <- exps[[i]]
+  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)),
+       abs(dat$new_area_normby_t2_fan)[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 15),
+       cex.axis = 2,
+       xaxt = "n")
+  axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
+
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, 0.06, "H-F", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.06, "0-F", cex = 2)
+  }
+
+
+  # add lines for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]),
+          c((dat$new_area_normby_t2_fan * 100)[dat$cycle == (j-1) & dat$time_in_cycle == cycle.len],
+            (dat$new_area_normby_t2_fan * 100)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz2[i], alphas[i]))
+  }
+
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, mean_of_medians = mean(new_area_normby_t2_fan) * 100)
+  lines(0:cycle.len,
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(colz2[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+
+  if(i == 4){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz2[i], 0.4), darken(colz2[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3,
+           cex = 2
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no,
+           cex = 2
+    )
+  }
+}
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = 0, cex = 1.5)
+mtext(text = expression("F"[n]*" (%)"), 
+      side = 2, outer = T, line = 0, cex = 1.5)
+
+dev.off()
+
+```
+
+
+<!-- # Avulsion frequency: -->
+
+<!-- ### Avulsion definition 1: -->
+<!-- First, look at avulsions just as the exceedance of a Fn threshold (1 min lag). -->
+
+<!-- Number of avulsions (less cycles in exps 8 and 9 - better to look at number of avulsions per cycle?) -->
+```{r, eval = F}
+lag1_list <- list(run1, run6, run7, run8, run9)
+
+# empty list for avulsion subsets
+lag1_av <- list()
+lag1_av.count <- data.frame(Exp = c(1, 6, 7, 8, 9),
+                            count = rep(NA, 5),
+                            count.per.cycle = rep(NA, 5))
+# set threshold
+thresh <- 0.085 # new flow area (rel to fan area) must be higher than this. Arbitrary
+
+for(i in 1:length(lag1_list)){
+  df <- lag1_list[[i]]
+  
+  # identify events
+  ss_avulsion <- filter(df, new_area_normby_t2_fan > thresh) %>%
+  mutate(interv = t_min - lag(t_min)) %>% # interim var. to identify START of avulsion events
+  # (for cases where rapid flow change continues over multiple timesteps - count as 1 event)
+  filter(interv != 1 | is.na(interv)) %>% # keep rows where lag > 1 or NA (i.e. start of avulsion)
+  mutate(interv = t_min - lag(t_min)) # recalculate interval so it is between START of events
+  
+  lag1_av[[i]] <- ss_avulsion
+  lag1_av.count[i,2] <- nrow(ss_avulsion)
+  lag1_av.count[i,3] <- nrow(ss_avulsion) / (max(df$cycle) - 1)
+}
+
+
+
+knitr::kable(lag1_av.count, caption = paste0("Number of avulsions (i.e. times where Fn > ", thresh * 100, "%) in each experiment. Threshold exceedance for multiple successive minutes is counted as one avulsion."))
+```
+
+
+<!-- Burstiness: -->
+```{r, eval = F}
+
+# empty df for outputs
+avulsion.burstiness <- data.frame(
+    Exp = c(1, 6, 7, 8, 9),
+    periodicity = rep(NA, 5)
+  )
+
+for(i in 1:length(lag1_av)){
+  # get data
+  dat <- lag1_av[[i]]
+  # compute r and n
+  r <- sd(dat$interv, na.rm = T) / mean(dat$interv, na.rm = T)
+  n <- nrow(dat)
+  # test if it's ok to use
+  if(is.na(r) | is.na(n)){
+    legitimate <- FALSE
+  } else if (0 <= r & r <= sqrt(n-1)){
+    legitimate <- TRUE}
+  # compute burstiness
+  if(legitimate == TRUE){
+    burstiness_parameter_2 <- (sqrt(n+1) * r - sqrt(n-1)) / 
+    ((sqrt(n+1) - 2) * r + sqrt(n-1))
+  }else{
+    burstiness_parameter_2 <- NA}
+  # save to df
+  avulsion.burstiness[i, 2] <- burstiness_parameter_2
+}
+knitr::kable(avulsion.burstiness, caption = "Avulsion burstiness, from Kim and Jo (2016?). -1 = periodic, 0 = random, 1 = extremely bursty.")
+```
+
+
+<!-- Do they fall in high or low feed periods? -->
+```{r eval=F}
+hvl <- data.frame(exp = c(1, 6:9),
+                  n.high = rep(NA, 5),
+                  n.low = rep(NA, 5))
+print("Why is this being evaluated")
+alldat <- lag1_list
+for (i in 1:length(lag1_av)){
+  dat <- lag1_av[[i]]
+  dat_full <- alldat[[i]]
+  start.row <- min(which(dat_full$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat_full$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  high <- nrow(filter(dat, time_in_cycle <= (cycle.len/2)))
+  low <- nrow(filter(dat, time_in_cycle > (cycle.len/2)))
+  # error check
+  if(high + low != lag1_av.count[i,2]){
+    print("Il y a un bogue")
+    break
+  }
+  hvl[i, 2] <- high
+  hvl[i, 3] <- low
+}
+knitr::kable(hvl, caption = "Number of 'avulsions' in high and low feed periods")
+```
+
+
+<!-- Do they tend to occur n minutes after change? -->
+
+```{r, eval = F}
+# empty df. tta = time to avulsion
+tta <- data.frame(exp = c(1, 6:9),
+                  t.high = rep(NA, 5),
+                  t.low = rep(NA, 5))
+for (i in 1:length(lag1_av)){
+  dat <- lag1_av[[i]]
+  dat_full <- alldat[[i]]
+  start.row <- min(which(dat_full$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat_full$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # compute time to avulsion (after feed change)
+  dat <- mutate(dat, ttav = time_in_cycle %% (cycle.len/2))
+  # subsets for high/low feed
+  high <- filter(dat, time_in_cycle <= (cycle.len/2))
+  low <- filter(dat, time_in_cycle > (cycle.len/2))
+  tta[i, 2] <- mean(high$ttav)
+  tta[i, 3] <- mean(low$ttav)
+}
+knitr::kable(tta, caption = "Mean number of minutes before 'avulsion' after start of high and low feed period")
+```
+
+
+<!-- ### Avulsion definition 2: -->
+
+<!-- Then look at avulsions as defined in paper 1 (3 min lag, 10.5% of fan newly inundated AND abandoned when comparing flow map 1 to 4, 2 to 5 etc). -->
+
+```{r data.wrangling, eval = F}
+# Import 3 min lag data
+run <- 1
+repe <- 2
+
+lag3_1 <- read.csv(
+  paste0(drive1, 
+         ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+         repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+         "_rep", repe, "_lag3_overlap_and_antioverlap.csv")) %>%
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # Assign min in cycle
+  mutate(run = run)
+
+# time assigned so that minute corresponds to LAST minute of avulsion event.
+
+run <- 6
+repe <- 1
+lag3_6 <- read.csv(
+  paste0(drive2, 
+         ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+         repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+         "_rep", repe, "_lag3_overlap_and_antioverlap.csv")) %>%
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # Assign min in cycle
+  mutate(run = run)
+
+run <- 7
+lag3_7 <- read.csv(
+  paste0(drive2, 
+         ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+         repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+         "_rep", repe, "_lag3_overlap_and_antioverlap.csv")) %>%
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # Assign min in cycle
+  mutate(run = run)
+
+run <- 8
+lag3_8 <- read.csv(
+  paste0(drive2, 
+         ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+         repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+         "_rep", repe, "_lag3_overlap_and_antioverlap.csv")) %>%
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
+  mutate(run = run)
+
+run <- 9
+lag3_9 <- read.csv(
+  paste0(drive2, 
+         ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+         repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+         "_rep", repe, "_lag3_overlap_and_antioverlap.csv")) %>%
+  # divide into 10 minute periods (coded so that high feed is START):
+  mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
+  mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
+  mutate(run = run)
+
+lag3_list <- list(lag3_1, lag3_6, lag3_7, lag3_8, lag3_9)
+```
+
+<!-- Compare number of avulsions: -->
+```{r, echo = F, eval = F}
+# 1. Identify avulsion events
+#----
+# empty list for avulsion subsets
+lag3_av <- list()
+lag3_av.count <- data.frame(Exp = c(1, 6, 7, 8, 9),
+                                count = rep(NA, 5))
+# set threshold
+thresh1 <- 0.105 # new flow area (rel to fan area) must be higher than this. 
+# ~89th percentile of new flow area, for run 1 rep 1
+
+for(i in 1:length(lag3_list)){
+  df <- lag3_list[[i]]
+  
+  # identify events
+  ss_avulsion <- filter(df, df$new_area_normby_t2_fan > thresh1 & # apply threshold
+                             df$abandoned_area_normby_t2_fan > thresh1) %>% 
+  dplyr::select(time, t_hr, t_min, t_sec, time_in_cycle, cycle) %>% # get rid of unneeded columns
+  mutate(interv = t_min - lag(t_min)) %>% # interim var. to identify START of avulsion events
+  # (for cases where rapid flow change continues over multiple timesteps - count as 1 event)
+  filter(interv != 1 | is.na(interv)) %>% # keep rows where lag > 1 or NA (i.e. start of avulsion)
+  mutate(interv = t_min - lag(t_min)) # recalculate interval so it is between START of events
+  
+  lag3_av[[i]] <- ss_avulsion
+  lag3_av.count[i,2] <- nrow(ss_avulsion)
+}
+
+
+knitr::kable(lag3_av.count, caption = "Number of avulsions (as defined in paper 1) in each experiment")
+
+```
+
+<!-- Compare burstiness -->
+```{r, eval = F}
+# empty df for outputs
+Lag3.avulsion.burstiness <- data.frame(
+    Exp = c(1, 6, 7, 8, 9),
+    periodicity = rep(NA, 5)
+  )
+
+for(i in 1:length(lag3_av)){
+  # get data
+  dat <- lag3_av[[i]]
+  # compute r and n
+  r <- sd(dat$interv, na.rm = T) / mean(dat$interv, na.rm = T)
+  n <- nrow(dat)
+  # test if it's ok to use
+  if(is.na(r) | is.na(n)){
+    legitimate <- FALSE
+  } else if (0 <= r & r <= sqrt(n-1)){
+    legitimate <- TRUE}
+  # compute burstiness
+  if(legitimate == TRUE){
+    burstiness_parameter_2 <- (sqrt(n+1) * r - sqrt(n-1)) / 
+    ((sqrt(n+1) - 2) * r + sqrt(n-1))
+  }else{
+    burstiness_parameter_2 <- NA}
+  # save to df
+  avulsion.burstiness[i, 2] <- burstiness_parameter_2
+}
+knitr::kable(avulsion.burstiness, caption = "Avulsion burstiness, from Kim and Jo (2016?). -1 = periodic, 0 = random, 1 = extremely bursty.")
+```
+
+<!-- Do they fall in high or low feed periods? -->
+
+```{r, eval = F}
+hvl <- data.frame(exp = c(1, 6:9),
+                  n.high = rep(NA, 5),
+                  n.low = rep(NA, 5))
+
+for (i in 1:length(lag3_list)){
+  dat <- lag3_av[[i]]
+  dat_full <- lag3_list[[i]]
+  start.row <- min(which(dat_full$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat_full$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  high <- filter(dat, time_in_cycle > 1 & time_in_cycle <= (cycle.len/2 + 1))
+  high <- nrow(high)
+  low <- nrow(filter(dat, time_in_cycle > (cycle.len/2 + 1) | time_in_cycle == 1))
+  # error check
+  if(high + low != lag3_av.count[i,2]){
+    print("Il y a un bogue")
+    break
+  }
+  hvl[i, 2] <- high
+  hvl[i, 3] <- low
+}
+knitr::kable(hvl, caption = "Number of 'avulsions' in high and low feed periods")
+```
+
+<!-- Do they tend to occur n minutes after change? -->
+
+```{r, eval = F}
+# empty df. tta = time to avulsion
+tta <- data.frame(exp = c(1, 6:9),
+                  t.high = rep(NA, 5),
+                  t.low = rep(NA, 5))
+for (i in 1:length(lag3_list)){
+  dat <- lag3_av[[i]]
+  dat_full <- lag3_list[[i]]
+  start.row <- min(which(dat_full$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat_full$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # compute time to avulsion (after feed change)
+  dat <- mutate(dat, ttav = time_in_cycle %% (cycle.len/2))
+  # subsets for high/low feed
+  high <- filter(dat, time_in_cycle <= (cycle.len/2))
+  low <- filter(dat, time_in_cycle > (cycle.len/2))
+  tta[i, 2] <- mean(high$ttav)
+  tta[i, 3] <- mean(low$ttav)
+}
+knitr::kable(tta, caption = "Mean number of minutes before end of 'avulsion' after start of high and low feed period. Note that avulsion is 3 mins long.")
+```
+
+# Channel pattern variability
+
+<!-- ### PCA of flow maps.  -->
+
+Binary where channel = 1, "dry" = 0.
+
+<!-- E.g. if you do PCA of flow maps, is there more/less explained by the first PC when variability is higher/longer (implying a dominance of channelized/spread states). -->
+
+<!-- TRY COARSENING FLOW MAPS FIRST (AGGREGATE) TO SPEED UP PCA. Coarsen to 5 mm -->
+```{r aggregate_wbs, eval = FALSE}
+# This step completed already (code just here for record keeping)
+runz <- c(1, 6:9)
+repz <- c(2, rep(1, 4))
+drivez <- c(drive1, rep(drive2, 4))
+
+for (j in 1:length(runz)){
+  run <- runz[j]
+  repe <- repz[j]
+  drive <- drivez[j]
+  
+  # import
+  f_list <- list.files(paste0(drive, ":/Experiments/Processing/Run", run, 
+                              "/Run", run,
+                              "_rep", repe, 
+                              "/_1min_intervals/wet_binary_smoothed"), 
+                       pattern = ".tif")
+  if(!dir.exists(paste0(drive, ":/Experiments/Processing/Run", run, 
+                              "/Run", run,
+                              "_rep", repe, 
+                              "/_1min_intervals/wet_binary_smoothed_aggregate5mm"))){
+    dir.create(paste0(drive, ":/Experiments/Processing/Run", run, 
+                              "/Run", run,
+                              "_rep", repe, 
+                              "/_1min_intervals/wet_binary_smoothed_aggregate5mm"))
+    print("New Directory Created")
+                              }
+  
+  for(i in f_list){
+    r <- raster(paste0(drive, ":/Experiments/Processing/Run", run, 
+                              "/Run", run,
+                              "_rep", repe, 
+                              "/_1min_intervals/wet_binary_smoothed/", i))
+    t <- paste0(strsplit(i,'')[[1]][4:7], collapse = '') # get time, as character
+    r_agg <- aggregate(r, fact = c(5,5), fun = modal)
+    writeRaster(r_agg, file = 
+                  paste0(
+                    drive, ":/Experiments/Processing/Run", run, "/Run", run,
+                    "_rep", repe,
+                    "/_1min_intervals/wet_binary_smoothed_aggregate5mm/wbsa_", 
+                    t, ".tif"),
+                overwrite = TRUE)
+    print(paste0(t, " is done!"))
+  }
+  print(paste0("Run ", run, " is done!"))
+}
+
+```
+
+
+<!-- Case 1: all data (no separation for high/low feed periods) -->
+```{r PCA_all, eval=FALSE}
+
+# don't repeat this step - not very useful, but leaving here...
+
+# list of runs
+runs <- c(1, 6, 7, 8, 9)
+# list of reps
+reps <- c(2, 1, 1, 1, 1)
+drives <- c(drive1, rep(drive2, 4))
+#
+# loop
+for (i in 1:length(runs)) {
+  run <- runs[i]
+  repe <- reps[i]
+  drive <- drives[i]
+  
+  # check if PCA already run, before performing it (it's SLOW)
+  if(file.exists(paste0(drive, ":/Experiments/Processing/Run", run, 
+                          "/Run", run, "_rep", repe, 
+                          "/_1min_intervals/summary_data/PCA/Run", 
+                          run, "_rep", repe, ".grd"))){
+  # rpc <- readRSTBX(paste0(drive, ":/Experiments/Processing/Run", run,
+  #                         "/Run", run, "_rep", repe,
+  #                         "/_1min_intervals/summary_data/PCA/Run",
+  #                         run, "_rep", repe))
+  
+  #plot(rpc$map[[1:4]])
+  #title(main = paste0("Run ", run))
+  
+  } else {
+  
+  # import smoothed channel maps as stack
+  stackfiles <- list.files(
+    path = paste0(
+      drive, ":/Experiments/Processing/Run", run, "/Run", run,
+      "_rep", repe, "/_1min_intervals/wet_binary_smoothed/"), pattern = ".tif")
+  
+  rstack <- raster::stack(
+    paste0(
+      drive, ":/Experiments/Processing/Run", run, "/Run", run,
+      "_rep", repe, "/_1min_intervals/wet_binary_smoothed/", stackfiles),
+    quick = T
+  )
+  
+  # run PCA
+  rpc <-
+    rasterPCA(
+      rstack,
+      nSamples = 5000,
+      nComp = 10,
+      spca = F,
+      maskCheck = F
+    )
+  
+  # save PCA outputs
+  if (!dir.exists(paste0( drive, ":/Experiments/Processing/Run", run, "/Run", run,
+      "_rep", repe, "/_1min_intervals/summary_data/PCA"))) {
+    dir.create(paste0( drive, ":/Experiments/Processing/Run", run, "/Run", run,
+        "_rep", repe, "/_1min_intervals/summary_data/PCA"))}
+  
+  saveRSTBX(rpc, filename = paste0(
+      drive, ":/Experiments/Processing/Run",run,"/Run",run,
+      "_rep",repe,"/_1min_intervals/summary_data/PCA/Run",run,"_rep",repe),
+    overwrite = T
+  )
+  
+  # ## Model parameters:
+  # summary(rpc$model)
+  # loadings(rpc$model)
+  # 
+  # ggRGB(rpc$map, 1, 2, 3, stretch = "lin", q = 0)
+  # if (require(gridExtra)) {
+  #   plots <-
+  #     lapply(1:3, function(x)
+  #       ggR(rpc$map, x, geom_raster = TRUE))
+  #   grid.arrange(plots[[1]], plots[[2]], plots[[3]], ncol = 2)
+  # }
+  }
+}
+
+```
+
+<!-- Separate into high vs low feed periods. -->
+
+<!-- High feed periods: -->
+
+```{r PCA_high_feed, eval=F}
+
+# list of runs
+runs <- c(6, 7, 8, 9)
+# list of reps
+repe <- 1
+drive <- drive2
+
+#
+# loop
+for (i in 1:length(runs)) {
+  run <- runs[i]
+  
+  # check if PCA already run, before performing it (it's SLOW)
+  if(file.exists(paste0(drive, ":/Experiments/Processing/Run", run, 
+                          "/Run", run, "_rep", repe, 
+                          "/_1min_intervals/summary_data/PCA/Run", 
+                          run, "_rep", repe, "high_5mm.grd"))){
+  rpc_re <- readRSTBX(paste0(drive, ":/Experiments/Processing/Run", run,
+                          "/Run", run, "_rep", repe,
+                          "/_1min_intervals/summary_data/PCA/Run",
+                          run, "_rep", repe, "high_5mm"))
+
+  plot(rpc_re$map[[1]], 
+       col = rev(colorRampPalette(brewer.pal(9, "YlGnBu"))(20)),
+       breaks = seq(-4, 16, len = 21),
+       legend = F)
+  title(main = paste0("Run ", run, " high feed"))
+  plot(rpc_re$map[[1]], 
+       legend.only=TRUE, 
+       col = rev(colorRampPalette(brewer.pal(9, "YlGnBu"))(20)),
+       breaks = seq(-4, 16, len = 21),
+       axis.args=list(at=seq(-4, 16, 4),
+                      cex.axis=0.8),
+       legend.args=list(
+         text='PC scores', side=4, font=2, line=1.8, cex=0.9),
+       smallplot=c(0.88,0.89, 0.1,0.9))
+  
+  # summary(rpc_re$model)
+  # loadings(rpc_re$model)
+  
+  } else {
+  
+  # import smoothed channel maps as stack
+    # first get timesteps of high feed
+  high_steps <- slope_dat[[i+1]] %>%
+    filter(time_in_cycle <= max(time_in_cycle / 2))
+  high_steps <- pull(high_steps, tvec)
+  
+  rstack <- raster::stack(
+    paste0(
+      drive, ":/Experiments/Processing/Run", run, "/Run", run,
+      "_rep", repe, "/_1min_intervals/wet_binary_smoothed_aggregate5mm/wbsa_",
+      high_steps, ".tif"),
+    quick = T
+  )
+  
+  # run PCA
+  rpc <-
+    rasterPCA(
+      rstack,
+      nSamples = 5000,
+      nComp = 10,
+      spca = F,
+      maskCheck = F
+    )
+  
+  # save PCA outputs
+  if (!dir.exists(paste0( drive, ":/Experiments/Processing/Run", run, "/Run", run,
+      "_rep", repe, "/_1min_intervals/summary_data/PCA"))) {
+    dir.create(paste0( drive, ":/Experiments/Processing/Run", run, "/Run", run,
+        "_rep", repe, "/_1min_intervals/summary_data/PCA"))}
+  
+  saveRSTBX(rpc, filename = paste0(
+      drive, ":/Experiments/Processing/Run",run,"/Run",run,
+      "_rep",repe,"/_1min_intervals/summary_data/PCA/Run",run,"_rep",
+      repe, "high_5mm"),
+    overwrite = T
+  )
+  
+  }
+}
+
+```
+
+<!-- Low/no feed periods: -->
+
+```{r PCA_low_feed, eval=F}
+
+# list of runs
+runs <- c(6, 7, 8, 9)
+# list of reps
+repe <- 1
+drive <- drive2
+
+#
+# loop
+for (i in 1:length(runs)) {
+  run <- runs[i]
+  
+  # check if PCA already run, before performing it (it's SLOW)
+  if(file.exists(paste0(drive, ":/Experiments/Processing/Run", run, 
+                          "/Run", run, "_rep", repe, 
+                          "/_1min_intervals/summary_data/PCA/Run", 
+                          run, "_rep", repe, "low_5mm.grd"))){
+  rpc_re <- readRSTBX(paste0(drive, ":/Experiments/Processing/Run", run,
+                          "/Run", run, "_rep", repe,
+                          "/_1min_intervals/summary_data/PCA/Run",
+                          run, "_rep", repe, "low_5mm"))
+
+  plot(rpc_re$map[[1]], 
+       col = rev(colorRampPalette(brewer.pal(9, "YlGnBu"))(20)),
+       breaks = seq(-4, 16, len = 21),
+       legend = F)
+  title(main = paste0("Run ", run, " low/no feed"))
+  plot(rpc_re$map[[1]], 
+       legend.only=TRUE, 
+       col = rev(colorRampPalette(brewer.pal(9, "YlGnBu"))(20)),
+       breaks = seq(-4, 16, len = 21),
+       axis.args=list(at=seq(-4, 16, 4),
+                      cex.axis=0.8),
+       legend.args=list(
+         text='PC scores', side=4, font=2, line=1.8, cex=0.9),
+       smallplot=c(0.88,0.89, 0.1,0.9))
+  
+  # summary(rpc_re$model)
+  # loadings(rpc_re$model)
+  
+  } else {
+  
+  # import smoothed channel maps as stack
+    # first get timesteps of low feed
+  low_steps <- slope_dat[[i+1]] %>%
+    filter(time_in_cycle > max(time_in_cycle / 2))
+  low_steps <- pull(low_steps, tvec)
+  
+  rstack <- raster::stack(
+    paste0(
+      drive, ":/Experiments/Processing/Run", run, "/Run", run,
+      "_rep", repe, "/_1min_intervals/wet_binary_smoothed_aggregate5mm/wbsa_",
+      low_steps, ".tif"),
+    quick = T
+  )
+  
+  # run PCA
+  rpc <-
+    rasterPCA(
+      rstack,
+      nSamples = 5000,
+      nComp = 10,
+      spca = F,
+      maskCheck = F
+    )
+  
+  # save PCA outputs
+  if (!dir.exists(paste0( drive, ":/Experiments/Processing/Run", run, "/Run", run,
+      "_rep", repe, "/_1min_intervals/summary_data/PCA"))) {
+    dir.create(paste0( drive, ":/Experiments/Processing/Run", run, "/Run", run,
+        "_rep", repe, "/_1min_intervals/summary_data/PCA"))}
+  
+  saveRSTBX(rpc, filename = paste0(
+      drive, ":/Experiments/Processing/Run",run,"/Run",run,
+      "_rep",repe,"/_1min_intervals/summary_data/PCA/Run",run,"_rep",
+      repe, "low_5mm"),
+    overwrite = T
+  )
+  
+  }
+}
+
+```
+
+<!-- ### Sum all channel maps (for high vs low feed), runs 6-9 -->
+```{r sum_flowmaps, include = F, eval = F}
+# don't re-evaluate - just here for record keeping to show how data generated.
+runs <- 6:9
+repe <- 1
+drive <- drive2
+
+# for high then low
+for(i in c("high", "low")){
+  # for each run
+  #for(j in 1:4){
+    run <- runs[j]
+    
+    # get timesteps of high/low feed
+    if(i == "high"){
+      steps <- slope_dat[[j+1]] %>%
+        filter(time_in_cycle <= max(time_in_cycle / 2))
+      steps <- pull(steps, tvec)
+    } else {
+      steps <- slope_dat[[j+1]] %>%
+        filter(time_in_cycle > max(time_in_cycle / 2))
+      steps <- pull(steps, tvec)
+    }
+    
+    # import smoothed channel maps as stack
+    rstack <- raster::stack(
+      paste0(
+        drive, ":/Experiments/Processing/Run", run, "/Run", run,
+        "_rep", repe, "/_1min_intervals/wet_binary_smoothed_aggregate5mm/wbsa_",
+        steps, ".tif"),
+      quick = T
+    )
+    
+    # sum all rasters in stack
+    raster_sum <- calc(rstack, fun=sum)
+    
+    # save summary raster outputs
+    if (!dir.exists(
+      paste0( drive, ":/Experiments/Processing/Run", 
+              run, "/Run", run, "_rep", repe,
+              "/_1min_intervals/summary_data/flowmap_summary"))) {
+      dir.create(
+        paste0( drive, ":/Experiments/Processing/Run", 
+                run, "/Run", run, "_rep", repe,
+                "/_1min_intervals/summary_data/flowmap_summary"))}
+    
+    writeRaster(raster_sum, 
+                filename = paste0( 
+                  drive, ":/Experiments/Processing/Run", 
+                  run, "/Run", run, "_rep", repe,
+                  "/_1min_intervals/summary_data/flowmap_summary/Run", 
+                  run, "_rep", repe, "_", i, "_feed_sum_5mm_res.tif"),
+                format = "GTiff",
+                overwrite = TRUE)
+    print(paste0("Run ", run, " ", i, " feed sum done!"))
+    checky <- raster(paste0( 
+                  drive, ":/Experiments/Processing/Run", 
+                  run, "/Run", run, "_rep", repe,
+                  "/_1min_intervals/summary_data/flowmap_summary/Run", 
+                  run, "_rep", repe, "_", i, "_feed_sum_5mm_res.tif"))
+  #}
+}
+
+```
+
+```{r plot_sum, eval = T}
+runs <- 6:9
+repe <- 1
+drive <- drive2
+
+png(paste0(outfiles, "/summed_flowmaps.png"),
+     width = 1920, height = 960)
+
+par(mfrow = c(2, 4),
+    mai = c(0.1, 0.1, 0.1, 0),
+    oma = c(2, 2, 0, 0))
+
+# for high then low
+for(i in c("high", "low")){
+  # for each run
+  for(j in 1:4){
+    run <- runs[j]
+    
+    raster_sum <- raster(
+      paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+             repe,"/_1min_intervals/summary_data/flowmap_summary/Run", 
+                  run, "_rep", repe, "_", i, "_feed_sum_5mm_res.tif"))
+    
+    # find max number of rasters (maximum for colour scale should be consistent)
+    # get number of rows (i.e. rasters) from slope data list above
+    ras_num <- lapply(slope_dat, nrow) %>% 
+      unlist(.) %>%
+      max(.) %>%
+      `/`(2) %>% # work out number of high OR low feed periods, so div by 2
+      ceiling(.) # round up to nearest whole num
+    
+    plot(raster_sum, 
+         col = rev(colorRampPalette(brewer.pal(9, "YlGnBu"))(20)),
+         breaks = seq(0, ras_num, len = 21),
+         legend = F)
+    legend("topright", legend = paste0("Run ", run, " ", i, " feed"),
+           cex = 2)
+    
+    # fancy colour bar
+    # plot(raster_sum, 
+    #      legend.only=TRUE, 
+    #      col = rev(colorRampPalette(brewer.pal(9, "YlGnBu"))(20)),
+    #      breaks = seq(0, ras_num, len = 21),
+    #      axis.args=list(at=seq(-4, 16, 4),
+    #                     cex.axis=0.8),
+    #      legend.args=list(
+    #        text='Number of flowmaps', side=4, font=2, line=1.8, cex=0.9),
+    #      smallplot=c(0.88,0.89, 0.1,0.9))
+  }
+}
+dev.off()
+
+```
+
+### Number of channels
+
+```{r cross-section data wrangling 0.5 m,eval=F}
+# empty list
+mylist <- list()
+
+# vector of runs/reps/drives
+runs <- c(1, 6, 7, 8, 9)
+repz <- c(2, 1, 1, 1, 1)
+drives <- c(drive1, rep(drive2, 4))
+
+# radius of cross-section
+rad <- 0.5
+
+for(i in 1:length(runs)){
+  run <- runs[i]
+  repe <- repz[i]
+  drive <- drives[i]
+  
+  if(i == 2){
+    df <- NULL
+  } else {
+    # import channelization data as df - note whether WBS or WBSC!
+  df <- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
+                        "_rep", repe,
+                        "/_1min_intervals/t_series/cross-section-analyses/Run", run,
+                        "_rep", repe, "_", rad, "m_dividedness_from_wbsc.csv")) %>%
+    mutate(t_min = t_sec/60)
+
+# divide into high/low feed minute periods (coded so that high feed is START):
+  if(run < 8){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 5, "low", "high"))
+  } else if(run == 8){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 10, "low", "high"))
+  } else if(run == 9){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
+  }
+  }
+
+  
+  
+  # save df to list
+  mylist[[i]] <- df
+}
+
+
+# 2) plot
+png(paste0(outfiles, "/n_chann_0.5m_vs_timeincycle.png"),
+     width = 960, height = 480)
+par(mai = c(0.5,0.5,0.1,0.1),
+    oma = c(3, 3, 0, 0))
+layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
+       widths = c(1, 1, 2, 4))
+
+for(i in c(1, 3:5)){
+  dat <- mylist[[i]]
+  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)),
+       abs(dat$dividedness)[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 15),
+       cex.axis = 2,
+       xaxt = "n")
+  axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
+
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, 0.12, "H-F", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.12, "0-F", cex = 2)
+  }
+
+
+  # add lines for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]),
+          c(abs(dat$dividedness)[dat$cycle == (j-1) &
+                                    dat$time_in_cycle == cycle.len],
+            abs(dat$dividedness)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz[i], 0.4))
+  }
+
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, mean_of_means = mean(dividedness))
+  lines(0:cycle.len,
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+
+  if(i == 5){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3,
+           cex = 2
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no,
+           cex = 2
+    )
+  }
+}
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = 0, cex = 1.5)
+mtext(text = "Number of channels", 
+      side = 2, outer = T, line = 0, cex = 1.5)
+
+dev.off()
+
+```
+
+
+```{r cross-section data wrangling 1m}
+# empty list
+mylist <- list()
+
+# vector of runs/reps/drives
+runs <- c(1, 6, 7, 8, 9)
+repz <- c(2, 1, 1, 1, 1)
+drives <- c(drive1, rep(drive2, 4))
+
+# radius of cross-section
+rad <- 1
+
+for(i in 1:length(runs)){
+  run <- runs[i]
+  repe <- repz[i]
+  drive <- drives[i]
+
+  # import channelization data as df - note whether WBS or WBSC!
+  df <- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
+                        "_rep", repe,
+                        "/_1min_intervals/t_series/cross-section-analyses/Run", run,
+                        "_rep", repe, "_", rad, "m_dividedness_from_wbsc.csv")) %>%
+    mutate(t_min = t_sec/60)
+
+# divide into high/low feed minute periods (coded so that high feed is START):
+  if(run < 8){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 5, "low", "high"))
+  } else if(run == 8){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 10, "low", "high"))
+  } else if(run == 9){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
+  }
+  
+  # save df to list
+  mylist[[i]] <- df
+}
+
+```
+
+
+
+
+Plot through time (cycles superimposed)
+
+```{r}
+# # 1) amplitude case------
+# par(mfrow = c(1, 3))
+# 
+# for(i in 1:3){
+#   dat <- mylist[[i]]
+#   # blank axes
+#   plot(0:10, 
+#        abs(dat$dividedness)[6:16],
+#        type = "n",
+#        xlab = "",
+#        ylab = "",
+#        ylim = c(0, 15))
+#   
+#   # line to delineate low/high feed
+#   if(i == 2){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.12, "High feed")
+#     text(8, 0.12, "Low feed")
+#   } else if(i == 3){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.12, "V. High feed")
+#     text(8, 0.12, "No feed")
+#   }
+# 
+#   
+#   # add lines for each cycle
+#   for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+#     lines(c(0,
+#             abs(dat$time_in_cycle)[dat$cycle == j]), 
+#           c(abs(dat$dividedness)[dat$cycle == (j-1) & dat$time_in_cycle == 10],
+#             abs(dat$dividedness)[dat$cycle == j]),
+#           #lwd = 0.5,
+#           col = alpha(colz[i], 0.4))
+#   }
+#   
+#   # get mean for group; add to plot
+#   df2 = group_by(dat, time_in_cycle)
+#   df2m = summarize(df2, mean_of_means = mean(dividedness))
+#   lines(0:10,
+#         c(pull(df2m[10, 2]), pull(df2m[,2])),
+#         col = darken(colz[i], amount = 0.4, space = "combined"),
+#         lwd = 2)
+#   
+#   # annotations
+#   Run.no <- paste0("R", dat$run[1])
+#   
+#   if(i == 1){
+#     legend("topright",
+#            bty = "n",
+#            legend = c("Single cycle", "Ensemble mean"),
+#            lwd = c(1, 2),
+#            col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+#            title = Run.no,
+#            text.font = 3
+#     )
+#   } else {
+#     legend("topright",
+#            bty = "n",
+#            legend = NA,
+#            title = Run.no
+#     )
+#   }
+# }
+# title(main = "Number of channels with varying feed amplitude",
+#       outer = T,
+#       line = -2)
+# mtext(side = 1, text = "Time in cycle (mins)",
+#       outer = T, line = -2)
+# mtext(text = "Number of channels", side = 2, outer = T, line = -2)
+
+#-------
+# 2) Duration case
+png(paste0(outfiles, "/n_chann_vs_timeincycle.png"),
+     width = 960, height = 480)
+par(mai = c(0.5,0.5,0.1,0.1),
+    oma = c(3, 3, 0, 0))
+layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
+       widths = c(1, 1, 2, 4))
+
+for(i in c(1, 3:5)){
+  dat <- mylist[[i]]
+  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)),
+       abs(dat$dividedness)[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 15),
+       cex.axis = 2,
+       xaxt = "n")
+  axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
+
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, 0.12, "H-F", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.12, "0-F", cex = 2)
+  }
+
+
+  # add lines for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]),
+          c(abs(dat$dividedness)[dat$cycle == (j-1) &
+                                    dat$time_in_cycle == cycle.len],
+            abs(dat$dividedness)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz[i], 0.4))
+  }
+
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, mean_of_means = mean(dividedness))
+  lines(0:cycle.len,
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+
+  if(i == 5){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3,
+           cex = 2
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no,
+           cex = 2
+    )
+  }
+}
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = 0, cex = 1.5)
+mtext(text = "Number of channels", 
+      side = 2, outer = T, line = 0, cex = 1.5)
+
+dev.off()
+```
+
+<!-- Boxplots - run-run -->
+
+```{r, eval = F}
+nc_1_6_7 <- rbind(mylist[[1]], mylist[[2]], mylist[[3]])
+boxplot(dividedness ~ run, data = nc_1_6_7,
+        main = "Number of channels, when varying amplitude",
+        col = alpha(colz[1:3], 0.7))
+test <- pairwise.t.test(nc_1_6_7$dividedness, 
+                nc_1_6_7$run, 
+                #p.adjust.method = "bonf",
+                pool.sd = FALSE, paired = FALSE)
+knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# repeat for duration
+nc_1_7_8_9 <- rbind(mylist[[1]], mylist[[3]], mylist[[4]], mylist[[5]])
+boxplot(dividedness ~ run, data = nc_1_7_8_9,
+        main = "Number of channels, when varying duration",
+        col = alpha(colz[c(1, 3:5)], 0.7))
+test <- pairwise.t.test(nc_1_7_8_9$dividedness, 
+                        nc_1_7_8_9$run, 
+                        #p.adjust.method = "bonf",
+                        pool.sd = FALSE, paired = FALSE)
+knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+```
+
+<!-- Boxplots - high-low, in each run -->
+
+```{r, eval = F}
+boxplot(dividedness ~ run, data = nc_1_6_7,
+        boxwex  = 0.25,
+        at      = 1:3 - 0.2,
+        subset  = feed == "high",
+        main = "Number of channels, when varying amplitude (high vs low)",
+        col = alpha(colz[1:3], 0.8))
+
+boxplot(dividedness ~ run, data = nc_1_6_7,
+        boxwex  = 0.25,
+        at      = 1:3 + 0.2,
+        subset  = feed == "low",
+        col = alpha(colz[1:3], 0.5),
+        add = T)
+
+# repeat for duration
+boxplot(dividedness ~ run, data = nc_1_7_8_9,
+        boxwex  = 0.25,
+        at      = 1:4 - 0.2,
+        subset  = feed == "high",
+        main = "Number of channels, when varying duration (high vs low)",
+        col = alpha(colz[c(1, 3:5)], 0.8))
+
+boxplot(dividedness ~ run, data = nc_1_7_8_9,
+        boxwex  = 0.25,
+        at      = 1:4 + 0.2,
+        subset  = feed == "low",
+        col = alpha(colz[c(1, 3:5)], 0.5),
+        add = T)
+```
+
+
+### Active Sector
+
+Plot through time (cycles superimposed)
+
+```{r}
+# 1) amplitude case-----
+# par(mfrow = c(1, 3))
+# 
+# for(i in 1:3){
+#   dat <- mylist[[i]]
+#   # blank axes
+#   plot(0:10, 
+#        abs(dat$ch_sector)[6:16],
+#        type = "n",
+#        xlab = "",
+#        ylab = "",
+#        ylim = c(0, 1.7))
+#   
+#   # line to delineate low/high feed
+#   if(i == 2){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.05, "High feed")
+#     text(8, 0.05, "Low feed")
+#   } else if(i == 3){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.05, "V. High feed")
+#     text(8, 0.05, "No feed")
+#   }
+# 
+#   
+#   # add lines for each cycle
+#   for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+#     lines(c(0,
+#             abs(dat$time_in_cycle)[dat$cycle == j]), 
+#           c(abs(dat$ch_sector)[dat$cycle == (j-1) & dat$time_in_cycle == 10],
+#             abs(dat$ch_sector)[dat$cycle == j]),
+#           #lwd = 0.5,
+#           col = alpha(colz[i], 0.4))
+#   }
+#   
+#   # get mean for group; add to plot
+#   df2 = group_by(dat, time_in_cycle)
+#   df2m = summarize(df2, mean_of_means = mean(ch_sector))
+#   lines(0:10,
+#         c(pull(df2m[10, 2]), pull(df2m[,2])),
+#         col = darken(colz[i], amount = 0.4, space = "combined"),
+#         lwd = 2)
+#   
+#   # annotations
+#   Run.no <- paste0("R", dat$run[1])
+#   
+#   if(i == 1){
+#     legend("topright",
+#            bty = "n",
+#            legend = c("Single cycle", "Ensemble mean"),
+#            lwd = c(1, 2),
+#            col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+#            title = Run.no,
+#            text.font = 3
+#     )
+#   } else {
+#     legend("topright",
+#            bty = "n",
+#            legend = NA,
+#            title = Run.no
+#     )
+#   }
+# }
+# title(main = "Active sector with varying feed amplitude",
+#       outer = T,
+#       line = -2)
+# mtext(side = 1, text = "Time in cycle (mins)",
+#       outer = T, line = -2)
+# mtext(text = "Active sector width (m)", side = 2, outer = T, line = -2)
+
+#-------
+# 2) Duration case
+png(paste0(outfiles, "/active_sector_vs_timeincycle.png"),
+     width = 960, height = 480)
+par(mai = c(0.5,0.5,0.1,0.1),
+    oma = c(3, 3, 0, 0))
+layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
+       widths = c(1, 1, 2, 4))
+
+for(i in c(1, 3:5)){
+  dat <- mylist[[i]]
+  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)),
+       abs(dat$ch_sector)[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 1.7),
+       cex.axis = 2,
+       xaxt = "n")
+  axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
+
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, 0.05, "H-F", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.05, "0-F", cex = 2)
+  }
+
+
+  # add lines for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]),
+          c(abs(dat$ch_sector)[dat$cycle == (j-1) &
+                                    dat$time_in_cycle == cycle.len],
+            abs(dat$ch_sector)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz[i], 0.4))
+  }
+
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, mean_of_means = mean(ch_sector))
+  lines(0:cycle.len,
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+
+  if(i == 5){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3,
+           cex = 2
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no,
+           cex = 2
+    )
+  }
+}
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = 0, cex = 1.5)
+mtext(text = "Active sector width (m)", 
+      side = 2, outer = T, line = 0, cex = 1.5)
+
+dev.off()
+```
+
+<!-- Boxplots - run-run -->
+
+```{r, eval = F}
+nc_1_6_7 <- rbind(mylist[[1]], mylist[[2]], mylist[[3]])
+boxplot(ch_sector ~ run, data = nc_1_6_7,
+        main = "Active sector width (m), when varying amplitude",
+        col = alpha(colz[1:3], 0.7))
+test <- pairwise.t.test(nc_1_6_7$ch_sector, 
+                nc_1_6_7$run, 
+                #p.adjust.method = "bonf",
+                pool.sd = FALSE, paired = FALSE)
+knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# repeat for duration
+nc_1_7_8_9 <- rbind(mylist[[1]], mylist[[3]], mylist[[4]], mylist[[5]])
+boxplot(ch_sector ~ run, data = nc_1_7_8_9,
+        main = "Active sector width (m), when varying duration",
+        col = alpha(colz[c(1, 3:5)], 0.7))
+test <- pairwise.t.test(nc_1_7_8_9$ch_sector, 
+                        nc_1_7_8_9$run, 
+                        #p.adjust.method = "bonf",
+                        pool.sd = FALSE, paired = FALSE)
+knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+```
+
+<!-- Boxplots - high-low, in each run -->
+
+```{r, eval = F}
+boxplot(ch_sector ~ run, data = nc_1_6_7,
+        boxwex  = 0.25,
+        at      = 1:3 - 0.2,
+        subset  = feed == "high",
+        main = "Active sector width (m), when varying amplitude (high vs low)",
+        col = alpha(colz[1:3], 0.8))
+
+boxplot(ch_sector ~ run, data = nc_1_6_7,
+        boxwex  = 0.25,
+        at      = 1:3 + 0.2,
+        subset  = feed == "low",
+        col = alpha(colz[1:3], 0.5),
+        add = T)
+
+# repeat for duration
+boxplot(ch_sector ~ run, data = nc_1_7_8_9,
+        boxwex  = 0.25,
+        at      = 1:4 - 0.2,
+        subset  = feed == "high",
+        main = "Active sector width (m), when varying duration (high vs low)",
+        col = alpha(colz[c(1, 3:5)], 0.8))
+
+boxplot(ch_sector ~ run, data = nc_1_7_8_9,
+        boxwex  = 0.25,
+        at      = 1:4 + 0.2,
+        subset  = feed == "low",
+        col = alpha(colz[c(1, 3:5)], 0.5),
+        add = T)
+```
+
+
+### Wet fraction
+
+```{r wet fraction data wrangling}
+# empty list
+mylist <- list()
+
+# vector of runs/reps/drives
+runs <- c(1, 6, 7, 8, 9)
+repz <- c(2, 1, 1, 1, 1)
+drives <- c(drive1, rep(drive2, 4))
+
+for(i in 1:length(runs)){
+  run <- runs[i]
+  repe <- repz[i]
+  drive <- drives[i]
+
+  # import channelization data as df
+  df <- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
+                        "_rep", repe, "/_1min_intervals/t_series/Run", run, 
+                        "_rep", repe, ".csv")) %>%
+
+  # append with time stamps
+    dplyr::select(-X) %>%
+    mutate(t_h = ifelse((time %% 100) == 0, 
+                        time / 100, floor (time / 100))) %>% # get hour
+    mutate(t_m = ifelse((time %% 100) == 0, 0, time - t_h * 100)) %>% # get minute
+    mutate(time2 = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
+    mutate(time2 = hm(time2)) %>% # convert to time format using lubridate
+    mutate(t_sec = period_to_seconds(
+      time2)) %>% # Convert to number of seconds since start
+    mutate(t_min = t_sec / 60) %>% # time in minutes
+    mutate(t_hr = t_min / 60) %>% # time in hours
+    dplyr::select(-time2, -t_h, -t_m) # remove unnecessary columns
+
+  
+  # divide into high/low feed minute periods (coded so that high feed is START):
+  if(run < 8){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 5, "low", "high"))
+  } else if(run == 8){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 10, "low", "high"))
+  } else if(run == 9){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
+  }
+  
+  # save df to list
+  mylist[[i]] <- df
+}
+
+```
+
+Plot through time (cycles superimposed)
+
+```{r}
+# # 1) amplitude case----
+# par(mfrow = c(1, 3))
+# 
+# for(i in 1:3){
+#   dat <- mylist[[i]]
+#   # blank axes
+#   plot(0:10, 
+#        abs(dat$wet.fraction)[6:16],
+#        type = "n",
+#        xlab = "",
+#        ylab = "",
+#        ylim = c(0.1, 0.3))
+#   
+#   # line to delineate low/high feed
+#   if(i == 2){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.12, "High feed")
+#     text(8, 0.12, "Low feed")
+#   } else if(i == 3){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.12, "V. High feed")
+#     text(8, 0.12, "No feed")
+#   }
+# 
+#   
+#   # add lines for each cycle
+#   for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+#     lines(c(0,
+#             abs(dat$time_in_cycle)[dat$cycle == j]), 
+#           c(abs(dat$wet.fraction)[dat$cycle == (j-1) & dat$time_in_cycle == 10],
+#             abs(dat$wet.fraction)[dat$cycle == j]),
+#           #lwd = 0.5,
+#           col = alpha(colz[i], 0.4))
+#   }
+#   
+#   # get mean for group; add to plot
+#   df2 = group_by(dat, time_in_cycle)
+#   df2m = summarize(df2, mean_of_medians = mean(wet.fraction))
+#   lines(0:10,
+#         c(pull(df2m[10, 2]), pull(df2m[,2])),
+#         col = darken(colz[i], amount = 0.4, space = "combined"),
+#         lwd = 2)
+#   
+#   # annotations
+#   Run.no <- paste0("R", dat$run[1])
+#   
+#   if(i == 1){
+#     legend("topright",
+#            bty = "n",
+#            legend = c("Single cycle", "Ensemble mean"),
+#            lwd = c(1, 2),
+#            col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+#            title = Run.no,
+#            text.font = 3
+#     )
+#   } else {
+#     legend("topright",
+#            bty = "n",
+#            legend = NA,
+#            title = Run.no
+#     )
+#   }
+# }
+# title(main = "Wet fraction with varying feed amplitude",
+#       outer = T,
+#       line = -2)
+# mtext(side = 1, text = "Time in cycle (mins)",
+#       outer = T, line = -2)
+# mtext(text = "Wet fraction", side = 2, outer = T, line = -2)
+
+#-------
+# 2) Duration case
+png(paste0(outfiles, "/wetfrac_vs_timeincycle.png"),
+     width = 960, height = 480)
+par(mai = c(0.5,0.5,0.1,0.1),
+    oma = c(3, 3, 0, 0))
+layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
+       widths = c(1, 1, 2, 4))
+
+for(i in c(1, 3:5)){
+  dat <- mylist[[i]]
+  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)), 
+       abs(dat$wet.fraction)[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0.1, 0.3),
+       cex.axis = 2,
+       xaxt = "n")
+  axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
+  
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, 0.12, "H-F", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.12, "0-F", cex = 2)
+  }
+  
+  
+  # add lines for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]), 
+          c(abs(dat$wet.fraction)[dat$cycle == (j-1) & 
+                                    dat$time_in_cycle == cycle.len],
+            abs(dat$wet.fraction)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz[i], 0.4))
+  }
+  
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, mean_of_means = mean(wet.fraction))
+  lines(0:cycle.len,
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+  
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+  
+  if(i == 5){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3,
+           cex = 2
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no,
+           cex = 2
+    )
+  }
+}
+
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = 0, cex = 1.5)
+mtext(text = "Wet fraction (all channels)", 
+      side = 2, outer = T, line = 0, cex = 1.5)
+
+dev.off()
+```
+
+<!-- SD and Mean during cycle -->
+```{r, eval = F}
+# for runs 167
+# for each run
+par(mfrow = c(1, 3))
+
+for(i in 1:3){
+  dat <- mylist[[i]]
+  # blank axes
+  plot(0:10, 
+       abs(dat$wet.fraction)[6:16],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0.1, 0.3))
+  
+  # line to delineate low/high feed
+  if(i == 2){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = 5.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(3, 0.12, "High feed")
+    text(8, 0.12, "Low feed")
+  } else if(i == 3){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = 5.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(3, 0.12, "V. High feed")
+    text(8, 0.12, "No feed")
+  }
+  
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, mean_of_wf = mean(wet.fraction, na.rm = T))
+  df2sd = summarize(df2, sd_of_wf = sd(wet.fraction, na.rm = T))
+
+  polygon(x = c(0:max(dat$time_in_cycle), max(dat$time_in_cycle):0, 0),
+          y = c((pull(df2m[10, 2]) + pull(df2sd[10, 2])), 
+                (pull(df2m[, 2]) + pull(df2sd[, 2])), 
+                rev(pull(df2m[, 2]) - pull(df2sd[, 2])), 
+                (pull(df2m[10, 2]) - pull(df2sd[10, 2])),
+                (pull(df2m[10, 2]) + pull(df2sd[10, 2]))),
+          col = alpha(colz[i], 0.5),
+          border = NA)
+  lines(0:10,
+        c(pull(df2m[10, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+  
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+  
+  if(i == 1){
+    legend("topright",
+           bty = "n",
+           legend = c("Standard deviation", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no
+    )
+  }
+}
+title(main = "Wet fraction mean/sd with varying feed amplitude",
+      outer = T,
+      line = -2)
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = -2)
+mtext(text = "Wet fraction", side = 2, outer = T, line = -2)
+  
+
+# 
+# 2) Duration case
+par(mfrow = c(1, 3))
+
+for(i in 3:5){
+  dat <- mylist[[i]]
+  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)), 
+       abs(dat$wet.fraction)[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0.1, 0.3))
+  
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, 0.12, "V. High feed")
+    text(cycle.len/2 + cycle.len/4, 0.12, "No feed")
+  }
+  
+  
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, mean_of_wf = mean(wet.fraction, na.rm = T))
+  df2sd = summarize(df2, sd_of_wf = sd(wet.fraction, na.rm = T))
+
+  polygon(x = c(0:max(dat$time_in_cycle), max(dat$time_in_cycle):0, 0),
+          y = c((pull(df2m[max(dat$time_in_cycle), 2]) +
+                   pull(df2sd[max(dat$time_in_cycle), 2])), 
+                (pull(df2m[, 2]) + pull(df2sd[, 2])), 
+                rev(pull(df2m[, 2]) - pull(df2sd[, 2])), 
+                (pull(df2m[max(dat$time_in_cycle), 2]) - 
+                   pull(df2sd[max(dat$time_in_cycle), 2])),
+                (pull(df2m[max(dat$time_in_cycle), 2]) + 
+                   pull(df2sd[max(dat$time_in_cycle), 2]))),
+          col = alpha(colz[i], 0.5),
+          border = NA)
+  lines(0:max(dat$time_in_cycle),
+        c(pull(df2m[max(dat$time_in_cycle), 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+  
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+  
+  if(i == 3){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no
+    )
+  }
+}
+title(main = "Wet fraction mean/sd with varying feed amplitude",
+      outer = T,
+      line = -2)
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = -2)
+mtext(text = "Wet fraction", side = 2, outer = T, line = -2)
+
+```
+
+<!-- Boxplots - run-run -->
+
+<!-- Are these measurements independent? Not really if interval = 1 min. Could randomly sample each run? -->
+```{r, eval = F}
+wf_1_6_7 <- rbind(mylist[[1]], mylist[[2]], mylist[[3]])
+boxplot(wet.fraction ~ run, data = wf_1_6_7,
+        main = "Wet fraction, when varying amplitude",
+        col = alpha(colz[1:3], 0.7))
+test <- pairwise.t.test(wf_1_6_7$wet.fraction, 
+                wf_1_6_7$run, 
+                #p.adjust.method = "bonf",
+                pool.sd = FALSE, paired = FALSE)
+knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# repeat for duration
+wf_1_7_8_9 <- rbind(mylist[[1]], mylist[[3]], mylist[[4]], mylist[[5]])
+boxplot(wet.fraction ~ run, data = wf_1_7_8_9,
+        main = "Wet fraction, when varying duration",
+        col = alpha(colz[c(1, 3:5)], 0.7))
+test <- pairwise.t.test(wf_1_7_8_9$wet.fraction, 
+                        wf_1_7_8_9$run, 
+                        #p.adjust.method = "bonf",
+                        pool.sd = FALSE, paired = FALSE)
+knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+```
+
+<!-- Boxplots - high-low, in each run -->
+```{r, eval = F}
+wf_1_6_7 <- rbind(mylist[[1]], mylist[[2]], mylist[[3]])
+boxplot(wet.fraction ~ run, data = wf_1_6_7,
+        boxwex  = 0.25,
+        at      = 1:3 - 0.2,
+        subset  = feed == "high",
+        main = "Wet fraction, when varying amplitude (high vs low)",
+        col = alpha(colz[1:3], 0.8))
+
+boxplot(wet.fraction ~ run, data = wf_1_6_7,
+        boxwex  = 0.25,
+        at      = 1:3 + 0.2,
+        subset  = feed == "low",
+        col = alpha(colz[1:3], 0.5),
+        add = T)
+
+# repeat for duration
+wf_1_7_8_9 <- rbind(mylist[[1]], mylist[[3]], mylist[[4]], mylist[[5]])
+boxplot(wet.fraction ~ run, data = wf_1_7_8_9,
+        boxwex  = 0.25,
+        at      = 1:4 - 0.2,
+        subset  = feed == "high",
+        main = "Wet fraction, when varying duration (high vs low)",
+        col = alpha(colz[c(1, 3:5)], 0.8))
+
+boxplot(wet.fraction ~ run, data = wf_1_7_8_9,
+        boxwex  = 0.25,
+        at      = 1:4 + 0.2,
+        subset  = feed == "low",
+        col = alpha(colz[c(1, 3:5)], 0.5),
+        add = T)
+
+```
+
+# Topographic change
+
+### Erosion, deposition and M (morphologic change)
+
+Outliers removed (agg or deg above a certain threshold).
+
+```{r agg/deg data wrangling}
+# empty list
+mylist <- list()
+
+agg.outlier.thresh <- 600
+deg.outlier.thresh <- -400
+
+# vector of runs/reps/drives
+runs <- c(1, 6, 7, 8, 9)
+repz <- c(2, 1, 1, 1, 1)
+drives <- c(drive1, rep(drive2, 4))
+
+for(i in 1:length(runs)){
+  run <- runs[i]
+  repe <- repz[i]
+  drive <- drives[i]
+
+  # import erosion/deposition data as df
+  df <- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
+                        "_rep", repe, 
+                        "/_1min_intervals/t_series/Run", run, 
+                        "_rep", repe, "_agg_deg_vols.csv")) %>%
+
+  # append with time stamps
+    mutate(t_h = ifelse((t1 %% 100) == 0, 
+                        t1 / 100, floor (t1 / 100))) %>% # get hour
+    mutate(t_m = ifelse((t1 %% 100) == 0, 0, t1 - t_h * 100)) %>% # get minute
+    mutate(time2 = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
+    mutate(time2 = hm(time2)) %>% # convert to time format using lubridate
+    mutate(t_sec = period_to_seconds(
+      time2)) %>% # Convert to number of seconds since start
+    mutate(t_min = t_sec / 60) %>% # time in minutes
+    mutate(t_hr = t_min / 60) %>% # time in hours
+    mutate(t2 = lead(t1)) %>% # get t2 timestamp for later DoD raster importing
+    dplyr::select(-time2, -t_h, -t_m) # remove unnecessary columns
+  
+  # convert agg/deg vols from m3 to cm3
+  df$agg <- df$agg * 1e+6
+  df$deg <- df$deg * 1e+6
+  
+  # remove outliers
+  df$agg[df$agg > agg.outlier.thresh] <- NA
+  df$deg[df$deg < deg.outlier.thresh] <- NA
+  
+  # compute M (gross morphologic change) in cm3
+  df$M <- df$agg + abs(df$deg)
+  # compute NM (net morphologic change) in cm3
+  df$NM <- df$agg + df$deg
+
+  
+  # divide into high/low feed minute periods (coded so that high feed is START):
+  # slightly diff from Fn as change assigned to FIRST timestep in pair, not second
+  if(run < 8){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 714) / 10)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 704 - 10 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 5, "low", "high"))
+  
+  } else if(run == 8){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 709) / 20)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 689 - 20 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 10, "low", "high"))
+    
+  } else if(run == 9){
+    df <- df %>%
+      mutate(cycle = ceiling((t_min - 699) / 40)) %>% # assign cycle
+      mutate(time_in_cycle = t_min - 659 - 40 * cycle) %>% # assign minute in cycle
+      mutate(run = run) %>%
+      mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
+  }
+  
+  # save df to list
+  mylist[[i]] <- df
+}
+
+# list to df for joining
+mad.df <- bind_rows(mylist)
+```
+
+How did agg/deg/M rates change throughout cycle?
+
+Deposition + erosion:
+
+```{r aggdeg, echo = F}
+rdbu <- RColorBrewer::brewer.pal(3,"RdBu")
+
+png(paste0(outfiles, "/aggdeg_vs_timeincycle.png"),
+     width = 960, height = 480)
+par(mai = c(0.5,0.5,0.1,0.1),
+    oma = c(3, 3, 0, 0))
+layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
+       widths = c(1, 1, 2, 4))
+
+for(i in c(1, 3:5)){
+  dat <- mylist[[i]]
+  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)),
+       dat$agg[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 600),
+       cex.axis = 2,
+       xaxt = "n")
+  axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
+
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, -3, "H-F", cex = 2)
+    text(cycle.len/2 + cycle.len/4, -3, "0-F", cex = 2)
+  }
+
+
+  # add lines for each cycle - agg
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]),
+          c(abs(dat$agg)[dat$cycle == (j-1) & dat$time_in_cycle == cycle.len],
+            abs(dat$agg)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(rdbu[length(rdbu)], 0.5)) # blue for agg
+  }
+
+  # get mean for group; add to plot - agg
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, meanz = mean(abs(agg), na.rm = T))
+  lines(0:cycle.len,
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(rdbu[length(rdbu)], amount = 0.4, space = "combined"),
+        lwd = 2)
+  
+  # rep prev 2 steps for deg:
+    # add lines for each cycle 
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]),
+          c(abs(dat$deg)[dat$cycle == (j-1) & dat$time_in_cycle == cycle.len],
+            abs(dat$deg)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(rdbu[1], 0.5)) # red for deg
+  }
+
+  # get mean for group; add to plot 
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, meanz = mean(abs(deg), na.rm = T))
+  lines(0:cycle.len,
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(rdbu[1], amount = 0.4, space = "combined"),
+        lwd = 2)
+
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+
+  if(i == 5){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Mean", "Deposition", "Erosion"),
+           lwd = c(1, 2, 1, 1),
+           col = c("black", "black",
+                   alpha(rdbu[length(rdbu)], 0.5), 
+                   alpha(rdbu[1], 0.5)),
+           title = Run.no,
+           text.font = 3,
+           cex = 2
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no,
+           cex = 2
+    )
+  }
+}
+
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = 0,
+      cex = 1.5)
+mtext(text = expression("Deposition or erosion volume (cm"^3*")"), 
+      side = 2, outer = T, line = 0,
+      cex = 1.5)
+
+dev.off()
+```
+
+Deposition:
+
+```{r agg, echo = F, eval = F}
+# # 1) amplitude case----
+# par(mfrow = c(1, 3))
+# 
+# for(i in 1:3){
+#   dat <- mylist[[i]]
+#   # blank axes
+#   plot(0:10, 
+#        abs(dat$agg)[6:16],
+#        type = "n",
+#        xlab = "",
+#        ylab = "",
+#        ylim = c(0, 800))
+#   
+#   # line to delineate low/high feed
+#   if(i == 2){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.06, "High feed")
+#     text(8, 0.06, "Low feed")
+#   } else if(i == 3){
+#     abline(v = 0.5, lty = 2,
+#            col = "gray80")
+#     abline(v = 5.5, lty = 2,
+#            col = "gray50")
+#     # labels
+#     text(3, 0.06, "V. High feed")
+#     text(8, 0.06, "No feed")
+#   }
+# 
+#   
+#   # add lines for each cycle
+#   for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+#     lines(c(0,
+#             abs(dat$time_in_cycle)[dat$cycle == j]), 
+#           c(abs(dat$agg)[dat$cycle == (j-1) & dat$time_in_cycle == 10],
+#             abs(dat$agg)[dat$cycle == j]),
+#           #lwd = 0.5,
+#           col = alpha(colz[i], 0.4))
+#   }
+#   
+#   # get mean for group; add to plot
+#   df2 = group_by(dat, time_in_cycle)
+#   df2m = summarize(df2, meanz = mean(abs(agg), na.rm = T))
+#   lines(0:10,
+#         c(pull(df2m[10, 2]), pull(df2m[,2])),
+#         col = darken(colz[i], amount = 0.4, space = "combined"),
+#         lwd = 2)
+#   
+#   # annotations
+#   Run.no <- paste0("R", dat$run[1])
+#   
+#   if(i == 1){
+#     legend("topright",
+#            bty = "n",
+#            legend = c("Single cycle", "Ensemble mean"),
+#            lwd = c(1, 2),
+#            col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+#            title = Run.no,
+#            text.font = 3
+#     )
+#   } else {
+#     legend("topright",
+#            bty = "n",
+#            legend = NA,
+#            title = Run.no
+#     )
+#   }
+# }
+# title(main = "Aggradation in minute, with varying feed amplitude",
+#       outer = T,
+#       line = -2)
+# mtext(side = 1, text = "Time in cycle (mins)",
+#       outer = T, line = -2)
+# mtext(text = "Aggradation (cm3)", side = 2, outer = T, line = -2)
+
+
+#-------
+# 2) Duration case
+par(mfrow = c(1, 3))
+
+for(i in 3:5){
+  dat <- mylist[[i]]
+  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)),
+       dat$agg[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 800))
+
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, 0.06, "V. High feed")
+    text(cycle.len/2 + cycle.len/4, 0.06, "No feed")
+  }
+
+
+  # add lines for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]),
+          c(abs(dat$agg)[dat$cycle == (j-1) & dat$time_in_cycle == cycle.len],
+            abs(dat$agg)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz[i], 0.4))
+  }
+
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, meanz = mean(abs(agg), na.rm = T))
+  lines(0:cycle.len,
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+
+  if(i == 1){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz2[i], 0.6), darken(colz2[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no
+    )
+  }
+}
+title(main = "Aggradation with varying feed duration",
+      outer = T,
+      line = -2)
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = -2)
+mtext(text = expression("Aggradation volume (cm"^3*")"), side = 2, outer = T, line = -2)
+
+# # are there a lot of outliers or do the feed periods just lead to extreme deposition?
+# # Examining run 1 rep 2 suggests Agg > 1000 cm3 is outlier
+# dat$rownum <- as.numeric(rownames(dat))
+# agg_outliers <- filter(dat, agg > 800)
+# agg_outliers$rownum
+# ===> redid this code with outlier removal
+```
+
+Erosion:
+
+```{r deg, echo = F, eval = F}
+# 1) amplitude case
+par(mfrow = c(1, 3))
+
+for(i in 1:3){
+  dat <- mylist[[i]]
+  # blank axes
+  plot(0:10, 
+       abs(dat$deg)[6:16],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 500))
+  
+  # line to delineate low/high feed
+  if(i == 2){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = 5.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(3, 0.06, "High feed")
+    text(8, 0.06, "Low feed")
+  } else if(i == 3){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = 5.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(3, 0.06, "V. High feed")
+    text(8, 0.06, "No feed")
+  }
+
+  
+  # add lines for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]), 
+          c(abs(dat$deg)[dat$cycle == (j-1) & dat$time_in_cycle == 10],
+            abs(dat$deg)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz[i], 0.4))
+  }
+  
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, meanz = mean(abs(deg), na.rm = T))
+  lines(0:10,
+        c(pull(df2m[10, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+  
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+  
+  if(i == 1){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no
+    )
+  }
+}
+title(main = "Erosion in minute, with varying feed amplitude",
+      outer = T,
+      line = -2)
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = -2)
+mtext(text = "Erosion (cm3)", side = 2, outer = T, line = -2)
+
+
+#-------
+# 2) Duration case
+par(mfrow = c(1, 3))
+
+for(i in 3:5){
+  dat <- mylist[[i]]
+  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)),
+       dat$deg[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 500))
+
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, 0.06, "V. High feed")
+    text(cycle.len/2 + cycle.len/4, 0.06, "No feed")
+  }
+
+
+  # add lines for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]),
+          c(abs(dat$deg)[dat$cycle == (j-1) & dat$time_in_cycle == cycle.len],
+            abs(dat$deg)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz[i], 0.4))
+  }
+
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, meanz = mean(abs(deg), na.rm = T))
+  lines(0:cycle.len,
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+
+  if(i == 1){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz2[i], 0.6), darken(colz2[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no
+    )
+  }
+}
+title(main = "Erosion with varying feed duration",
+      outer = T,
+      line = -2)
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = -2)
+mtext(text = expression("Erosion volume (cm"^3*")"), side = 2, outer = T, line = -2)
+
+# # are there a lot of outliers or do the feed periods just lead to extreme deposition?
+# # Examining run 1 rep 2 suggests deg > 1000 cm3 is outlier
+# dat$rownum <- as.numeric(rownames(dat))
+# deg_outliers <- filter(dat, abs(deg) > 800)
+# deg_outliers$rownum
+
+```
+
+Gross Morphologic Change (M = |deg| + agg) - irons out the nuances, esp for run 9.
+
+```{r M, echo = F, eval = F}
+# 1) amplitude case
+par(mfrow = c(1, 3))
+
+for(i in 1:3){
+  dat <- mylist[[i]]
+  # blank axes
+  plot(0:10, 
+       abs(dat$M)[6:16],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 1000))
+  
+  # line to delineate low/high feed
+  if(i == 2){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = 5.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(3, 0.06, "High feed")
+    text(8, 0.06, "Low feed")
+  } else if(i == 3){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = 5.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(3, 0.06, "V. High feed")
+    text(8, 0.06, "No feed")
+  }
+
+  
+  # add lines for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]), 
+          c(abs(dat$M)[dat$cycle == (j-1) & dat$time_in_cycle == 10],
+            abs(dat$M)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz[i], 0.4))
+  }
+  
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, meanz = mean(abs(M), na.rm = T))
+  lines(0:10,
+        c(pull(df2m[10, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+  
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+  
+  if(i == 1){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no
+    )
+  }
+}
+title(main = "Gross Morphologic change in minute, with varying feed amplitude",
+      outer = T,
+      line = -2)
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = -2)
+mtext(text = "Gross morphologic change (cm3)", side = 2, outer = T, line = -2)
+
+
+#-------
+# 2) Duration case
+par(mfrow = c(1, 3))
+
+for(i in 3:5){
+  dat <- mylist[[i]]
+  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
+  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)),
+       dat$M[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 1000))
+
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, 0.06, "V. High feed")
+    text(cycle.len/2 + cycle.len/4, 0.06, "No feed")
+  }
+
+
+  # add lines for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]),
+          c(abs(dat$M)[dat$cycle == (j-1) & dat$time_in_cycle == cycle.len],
+            abs(dat$M)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz[i], 0.4))
+  }
+
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, meanz = mean(abs(M), na.rm = T))
+  lines(0:cycle.len,
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+
+  if(i == 1){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz2[i], 0.6), darken(colz2[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no
+    )
+  }
+}
+title(main = "Gross morphologic change with varying feed duration",
+      outer = T,
+      line = -2)
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = -2)
+mtext(text = expression("Morphologic change volume (cm"^3*")"), side = 2, outer = T, line = -2)
+
+# # are there a lot of outliers or do the feed periods just lead to extreme deposition?
+# # Examining run 1 rep 2 suggests M > 1000 cm3 is outlier
+# dat$rownum <- as.numeric(rownames(dat))
+# M_outliers <- filter(dat, abs(M) > 800)
+# M_outliers$rownum
+
+```
+
+<!-- Net topographic change (agg, deg, M) in cycle -->
+
+```{r net_topo_change_in_cycle, eval = F}
+cycle_len_s <- c(10, 10, 10, 20, 40)
+runs <- c(1, 6:9)
+repes <- c(2, rep(1, 4))
+drives <- c(drive1, rep(drive2, 4))
+fi <- 2 # first index in DEM_list to use as t2. Leave on default (but expressed as variable to prevent problems if it does change.)
+
+# for each run
+for(i in 1:length(runs)){
+  cycle_len <- cycle_len_s[i]
+  run <- runs[i]
+  repe <- repes[i]
+  drive <- drives[i]
+  
+  # find timestamps of first minute in each cycle (i.e. high feed)
+  dat <- slope_dat[[i]] %>%
+    filter(time_in_cycle == 1)
+  dat <- pull(dat, var = tvec)
+  
+  # get DEMs for those timestamps
+  DEM_list <- list.files(
+    paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep",
+           repe, "/_1min_intervals/summary_data/DEM_7mm_smoothed/"), 
+           pattern = ".tif") # raw list
+  DEM_list <- unique (grep(paste(dat,collapse="|"), 
+                        DEM_list, value=TRUE)) # list for timestamps in dat
+  
+  # set up first DEM to start off loop
+  dem1 <- raster(
+    paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep",
+           repe, "/_1min_intervals/summary_data/DEM_7mm_smoothed/", 
+           DEM_list[(fi - 1)])
+  )
+  # get time, as character
+  t1 <- paste0(strsplit(DEM_list[(fi - 1)], '')[[1]][1:4], collapse = '') 
+  
+  # iterate through select DEMs and get DoD for each cycle
+  for(j in 2:length(DEM_list)){
+    t2 <- paste0(strsplit(DEM_list[j], '')[[1]][1:4], collapse = '') 
+    msk2 <- raster(
+      paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,"_rep",
+             repe, "/_1min_intervals/DoD_binary/DoD_binary", t2 ,".tif"))
+    
+    dem2 <- raster(
+      paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep",
+             repe, "/_1min_intervals/summary_data/DEM_7mm_smoothed/", DEM_list[j]))
+    
+    # Difference
+    DoD <- dem2 - dem1 %>%
+      `*` (msk2) # multiply by mask to extract values only on fan
+    threshold <- -0.002 # threshold the DoD, in m. Express as negative value
+    DoD[DoD > threshold & DoD < abs(threshold)] <- NA
+    
+    # # plot to check if sensible
+    # plot(DoD, col = brewer.pal(11, "RdBu"), main = paste0(t2, " - ", t1),
+    #      legend.args = list(text = "Elevation change (m)", side = 2))
+    
+    #-----------------------------
+    # remove clumps smaller than 2 cm2:
+    # uses code from https://gis.stackexchange.com/questions/130993/remove-clumps-of-pixels-in-r
+    rc <- clump(DoD)
+    
+    minsize <- 2 # smallest allowable clump size, in cm2
+    
+    #extract IDs of clumps TO BE REMOVED
+    clump2cm <- data.frame(freq(rc))
+    clump2cm <- clump2cm[clump2cm$count < (minsize * 100),] #remove clump observations with frequency smaller than 200
+    clump2cm <- as.vector(clump2cm$value) # record IDs from clumps which met the criteria in previous step
+    
+    rc[rc %in% clump2cm] <- NA #remove cells with IDs which do not belong to the group of interest
+    rc[!is.na(rc)] <- 1 # set all other clumps to value 1 for multiplication
+    
+    DoD <- DoD * rc # multiply clumps w/ value 1 to remove small clumps from DOD
+    
+    # # plot to check if sensible
+    # plot(DoD, col = brewer.pal(11, "RdBu"), main = paste0(t2, " - ", t1),
+    #      legend.args = list(text = "Elevation change (m)", side = 2))
+    
+    #-----------------------------------
+    
+    # save output raster
+    if(!dir.exists(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", 
+                          run, "_rep", repe,
+                          "/_1min_intervals/summary_data/DoD/Other_intervals"))){
+      dir.create(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", 
+                          run, "_rep", repe,
+                          "/_1min_intervals/summary_data/DoD/Other_intervals"))
+    }
+    
+    DoD_name <- paste0(drive, ":/Experiments/Processing/Run", run, "/Run", 
+                       run, "_rep", repe,
+                       "/_1min_intervals/summary_data/DoD/Other_intervals/", 
+                       t2, "-", t1, ".tif")
+
+    writeRaster(DoD, filename = DoD_name, format = "GTiff", overwrite=TRUE)
+    
+    # save volumetric data: agg, then deg
+    if(j == fi){
+      agg_deg_vols <- data.frame(
+        t1 = t1,
+        t2 = t2, 
+        agg_m3 = sum(DoD[DoD > 0]) / 1000000, # convert to change in m3
+        deg_m3 = sum(DoD[DoD < 0]) / 1000000 # convert to change in m3
+      )
+    } else {
+      agg_deg_vols <- rbind(
+        agg_deg_vols,
+        data.frame(
+          t1 = t1,
+          t2 = t2, 
+          agg_m3 = sum(DoD[DoD > 0]) / 1000000, # convert to change in m3
+          deg_m3 = sum(DoD[DoD < 0]) / 1000000)) # convert to change in m3
+    }
+    
+    
+    # progress tracker
+    print(paste0("t1 = ", t1, " and t2 = ", t2))
+    
+    # rename t2 to t1 for next iter.
+    t1 <- t2
+    dem1 <- dem2
+  }
+
+  # save df to file (t_series)
+  write.csv(agg_deg_vols, 
+            file = paste0(drive, ":/Experiments/Processing/Run", run, "/Run", 
+                       run, "_rep", repe,
+                       "/_1min_intervals/t_series/agg_deg_vols_", 
+                       cycle_len, "min.csv"),
+            row.names = F)
+}
+
+```
+
+```{r net_topo_change_plots, eval = F}
+cycle_len_s <- c(10, 10, 10, 20, 40)
+runs <- c(1, 6:9)
+repes <- c(2, rep(1, 4))
+drives <- c(drive1, rep(drive2, 4))
+
+agg_deg_list <- list()
+
+# import data as data frames
+for (i in 1:length(runs)){
+  drive <- drives[i]
+  run <- runs[i]
+  repe <- repes[i]
+  cycle_len <- cycle_len_s[i]
+  
+  agg_deg_vols <- read.csv(file = paste0(
+    drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+    repe, "/_1min_intervals/t_series/agg_deg_vols_", cycle_len, "min.csv"),
+    header = T) %>%
+  
+  # add column for run
+    mutate(run = run)
+  
+  agg_deg_list[[i]] <- agg_deg_vols
+}
+
+# merge into main df
+mdf <- bind_rows(agg_deg_list) %>%
+  
+  # add column for gross morphologic change M
+  mutate(M_m3 = agg_m3 + abs(deg_m3)) %>%
+  
+  # add column for net morphologic change NM
+  mutate(NM_m3 = agg_m3 + deg_m3) %>%
+  
+  # convert vols to cm3
+  mutate(M_cm3 = M_m3 * 1000000) %>%
+  mutate(NM_cm3 = NM_m3 * 1000000) %>%
+  mutate(agg_cm3 = agg_m3 * 1000000) %>%
+  mutate(deg_cm3 = deg_m3 * 1000000) 
+
+# boxplot of agg
+boxplot(agg_cm3 ~ run, data = mdf,
+        main = "Net aggradation in cycle (LENGTH VARIES 10:40 min)",
+        col = alpha(colz, 0.7))
+# test <- pairwise.t.test(slope50_1_6_7$slope_50pc, 
+#                 slope50_1_6_7$run, 
+#                 #p.adjust.method = "bonf",
+#                 pool.sd = FALSE, paired = FALSE)
+# knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# boxplot of deg
+boxplot(deg_cm3 ~ run, data = mdf,
+        main = "Net degradation in cycle (LENGTH VARIES 10:40 min)",
+        col = alpha(colz, 0.7),
+        ylim = c(-2000, 0))
+# test <- pairwise.t.test(slope50_1_6_7$slope_50pc, 
+#                 slope50_1_6_7$run, 
+#                 #p.adjust.method = "bonf",
+#                 pool.sd = FALSE, paired = FALSE)
+# knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# boxplot of M
+boxplot(M_cm3 ~ run, data = mdf,
+        main = "Net M (gross morph change) in cycle (LENGTH VARIES 10:40 min)",
+        col = alpha(colz, 0.7))
+# test <- pairwise.t.test(slope50_1_6_7$slope_50pc, 
+#                 slope50_1_6_7$run, 
+#                 #p.adjust.method = "bonf",
+#                 pool.sd = FALSE, paired = FALSE)
+# knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# boxplot of NM
+boxplot(NM_cm3 ~ run, data = mdf,
+        main = "Net NM (net morph change) in cycle (LENGTH VARIES 10:40 min)",
+        col = alpha(colz, 0.7),
+        ylim = c(0, 9000))
+```
+
+<!-- Net change in 40 minutes (longest cycle): -->
+```{r net_change_40min_calcs, eval = F}
+cycle_len_s <- c(10, 10, 10, 20, 40)
+runs <- c(1, 6:8) # run 9 already processed for 40 min cycle (above)
+repes <- c(2, rep(1, 4))
+drives <- c(drive1, rep(drive2, 4))
+fi <- 2 # first index in DEM_list to use as t2. Leave on default (but expressed as variable to prevent problems if it does change.)
+
+# for each run
+for(i in 1:length(runs)){
+  cycle_len <- cycle_len_s[i]
+  run <- runs[i]
+  repe <- repes[i]
+  drive <- drives[i]
+  
+  # find timestamps of first minute in each cycle (i.e. high feed)
+  dat <- slope_dat[[i]] %>%
+    filter(time_in_cycle == 1)
+  dat <- pull(dat, var = tvec)
+  
+  # get every 4th or 2nd timestep (for 40 min cycle), depending on run
+  n.keep <- 40 / cycle_len
+  dat <- dat[seq(1, length(dat), by = n.keep)]
+  
+  # get DEMs for those timestamps
+  DEM_list <- list.files(
+    paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep",
+           repe, "/_1min_intervals/summary_data/DEM_7mm_smoothed/"), 
+           pattern = ".tif") # raw list
+  DEM_list <- unique (grep(paste(dat,collapse="|"), 
+                        DEM_list, value=TRUE)) # list for timestamps in dat
+  
+  # set up first DEM to start off loop
+  dem1 <- raster(
+    paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep",
+           repe, "/_1min_intervals/summary_data/DEM_7mm_smoothed/", 
+           DEM_list[(fi - 1)])
+  )
+  # get time, as character
+  t1 <- paste0(strsplit(DEM_list[(fi - 1)], '')[[1]][1:4], collapse = '') 
+  
+  # iterate through select DEMs and get DoD for each cycle
+  for(j in 2:length(DEM_list)){
+    t2 <- paste0(strsplit(DEM_list[j], '')[[1]][1:4], collapse = '') 
+    msk2 <- raster(
+      paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,"_rep",
+             repe, "/_1min_intervals/DoD_binary/DoD_binary", t2 ,".tif"))
+    
+    dem2 <- raster(
+      paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep",
+             repe, "/_1min_intervals/summary_data/DEM_7mm_smoothed/", DEM_list[j]))
+    
+    # Difference
+    DoD <- dem2 - dem1 %>%
+      `*` (msk2) # multiply by mask to extract values only on fan
+    threshold <- -0.002 # threshold the DoD, in m. Express as negative value
+    DoD[DoD > threshold & DoD < abs(threshold)] <- NA
+    
+    # # plot to check if sensible
+    # plot(DoD, col = brewer.pal(11, "RdBu"), main = paste0(t2, " - ", t1),
+    #      legend.args = list(text = "Elevation change (m)", side = 2))
+    
+    #-----------------------------
+    # remove clumps smaller than 2 cm2:
+    # uses code from https://gis.stackexchange.com/questions/130993/remove-clumps-of-pixels-in-r
+    rc <- clump(DoD)
+    
+    minsize <- 2 # smallest allowable clump size, in cm2
+    
+    #extract IDs of clumps TO BE REMOVED
+    clump2cm <- data.frame(freq(rc))
+    clump2cm <- clump2cm[clump2cm$count < (minsize * 100),] #remove clump observations with frequency smaller than 200
+    clump2cm <- as.vector(clump2cm$value) # record IDs from clumps which met the criteria in previous step
+    
+    rc[rc %in% clump2cm] <- NA #remove cells with IDs which do not belong to the group of interest
+    rc[!is.na(rc)] <- 1 # set all other clumps to value 1 for multiplication
+    
+    DoD <- DoD * rc # multiply clumps w/ value 1 to remove small clumps from DOD
+    
+    # # plot to check if sensible
+    # plot(DoD, col = brewer.pal(11, "RdBu"), main = paste0(t2, " - ", t1),
+    #      legend.args = list(text = "Elevation change (m)", side = 2))
+    
+    #-----------------------------------
+    
+    # save output raster
+    if(!dir.exists(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", 
+                          run, "_rep", repe,
+                          "/_1min_intervals/summary_data/DoD/Other_intervals"))){
+      dir.create(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", 
+                          run, "_rep", repe,
+                          "/_1min_intervals/summary_data/DoD/Other_intervals"))
+    }
+    
+    DoD_name <- paste0(drive, ":/Experiments/Processing/Run", run, "/Run", 
+                       run, "_rep", repe,
+                       "/_1min_intervals/summary_data/DoD/Other_intervals/", 
+                       t2, "-", t1, ".tif")
+
+    writeRaster(DoD, filename = DoD_name, format = "GTiff", overwrite=TRUE)
+    
+    # save volumetric data: agg, then deg
+    if(j == fi){
+      agg_deg_vols <- data.frame(
+        t1 = t1,
+        t2 = t2, 
+        agg_m3 = sum(DoD[DoD > 0]) / 1000000, # convert to change in m3
+        deg_m3 = sum(DoD[DoD < 0]) / 1000000 # convert to change in m3
+      )
+    } else {
+      agg_deg_vols <- rbind(
+        agg_deg_vols,
+        data.frame(
+          t1 = t1,
+          t2 = t2, 
+          agg_m3 = sum(DoD[DoD > 0]) / 1000000, # convert to change in m3
+          deg_m3 = sum(DoD[DoD < 0]) / 1000000)) # convert to change in m3
+    }
+    
+    
+    # progress tracker
+    print(paste0("t1 = ", t1, " and t2 = ", t2))
+    
+    # rename t2 to t1 for next iter.
+    t1 <- t2
+    dem1 <- dem2
+  }
+
+  # save df to file (t_series)
+  write.csv(agg_deg_vols, 
+            file = paste0(drive, ":/Experiments/Processing/Run", run, "/Run", 
+                       run, "_rep", repe,
+                       "/_1min_intervals/t_series/agg_deg_vols_40min.csv"),
+            row.names = F)
+}
+```
+
+```{r net_topo_change_40min_plots, eval = F}
+runs <- c(1, 6:9)
+repes <- c(2, rep(1, 4))
+drives <- c(drive1, rep(drive2, 4))
+
+agg_deg_list <- list()
+
+# import data as data frames
+for (i in 1:length(runs)){
+  drive <- drives[i]
+  run <- runs[i]
+  repe <- repes[i]
+  
+  agg_deg_vols <- read.csv(file = paste0(
+    drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+    repe, "/_1min_intervals/t_series/agg_deg_vols_40min.csv"),
+    header = T) %>%
+  
+  # add column for run
+    mutate(run = run)
+  
+  agg_deg_list[[i]] <- agg_deg_vols
+}
+
+# merge into main df
+mdf <- bind_rows(agg_deg_list) %>%
+  
+  # add column for gross morphologic change M
+  mutate(M_m3 = agg_m3 + abs(deg_m3)) %>%
+  
+  # add column for net morphologic change NM
+  mutate(NM_m3 = agg_m3 + deg_m3) %>%
+  
+  # convert vols to cm3
+  mutate(M_cm3 = M_m3 * 1000000) %>%
+  mutate(NM_cm3 = NM_m3 * 1000000) %>%
+  mutate(agg_cm3 = agg_m3 * 1000000) %>%
+  mutate(deg_cm3 = deg_m3 * 1000000) 
+
+# boxplot of agg
+boxplot(agg_cm3 ~ run, data = mdf,
+        main = "Net aggradation in 40 min",
+        col = alpha(colz, 0.7))
+# test <- pairwise.t.test(slope50_1_6_7$slope_50pc, 
+#                 slope50_1_6_7$run, 
+#                 #p.adjust.method = "bonf",
+#                 pool.sd = FALSE, paired = FALSE)
+# knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# boxplot of deg
+boxplot(deg_cm3 ~ run, data = mdf,
+        main = "Net degradation in 40 min",
+        col = alpha(colz, 0.7))
+# test <- pairwise.t.test(slope50_1_6_7$slope_50pc, 
+#                 slope50_1_6_7$run, 
+#                 #p.adjust.method = "bonf",
+#                 pool.sd = FALSE, paired = FALSE)
+# knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# boxplot of M
+boxplot(M_cm3 ~ run, data = mdf,
+        main = "Net M (gross morph change) in 40 min",
+        col = alpha(colz, 0.7))
+# test <- pairwise.t.test(slope50_1_6_7$slope_50pc, 
+#                 slope50_1_6_7$run, 
+#                 #p.adjust.method = "bonf",
+#                 pool.sd = FALSE, paired = FALSE)
+# knitr::kable(test$p.value, caption = "p values from pair-wise t-tests")
+
+# boxplot of NM
+boxplot(NM_cm3 ~ run, data = mdf,
+        main = "Net NM (net morph change) in 40 min",
+        col = alpha(colz, 0.7))
+```
+
+
+<!-- Cumulative morphologic change in cycle (sum all agg/deg/M/NM). Note different cycle lengths! -->
+```{r gross_change_in_cycle, eval = F}
+# empty data frame for outputs
+gcic.df <- data.frame()
+
+for (i in 1:length(mylist)){
+  cycle_len <- cycle_len_s[i]
+  run <- runs[i]
+  
+  dfi <- mylist[[i]] # pull data from main list of agg/deg vols (see above)
+  
+  # get sum for each cycle (i.e. deposition in min 1 + min2 + minN)
+  df2 = group_by(dfi, cycle)
+  countyboi = tally(df2) %>% # isolate groups w/ full 10 minute record
+    filter(n == cycle_len)
+  df2sum = summarize(df2, 
+                     a.gross = sum(agg, na.rm = T),
+                     d.gross = sum(deg, na.rm = T),
+                     m.gross = sum(M, na.rm = T),
+                     nm.gross = sum(NM, na.rm = T)) %>% # sum for each cycle
+    right_join(., countyboi, by = "cycle") %>% # isolate grps w/ 10min records
+    dplyr::select(-n) %>% # remove obsolete variables
+    mutate(run = run)
+  
+  gcic.df <- rbind(gcic.df, df2sum)
+}
+
+# boxplots - not super meaningful with variable cycle duration. Look at 40 min instead!
+boxplot(a.gross ~ run, data = gcic.df,
+        main = "Cumulative aggradation in cycle (10:40 min)",
+        col = alpha(colz, 0.7),
+        ylim = c(0, 8000))
+
+boxplot(d.gross ~ run, data = gcic.df,
+        main = "Cumulative degradation in cycle (10:40 min)",
+        col = alpha(colz, 0.7),
+        ylim = c(-5000, 0))
+```
+
+<!-- Cumulative morphologic change in 10 minutes, i.e. shortest cycle (only runs 1, 6 and 7) -->
+```{r gross_change_in_10_min, eval = F}
+# empty data frame for outputs
+runs <- c(1, 6:7)
+
+gci10.df <- data.frame()
+
+for (i in 1:length(runs)){
+  run <- runs[i]
+  
+  dfi <- mylist[[i]] # pull data from main list of agg/deg vols (see above)
+  
+  # get sum for each cycle (i.e. deposition in min 1 + min2 + minN)
+  df2 = group_by(dfi, cycle)
+  countyboi = tally(df2) %>% # isolate groups w/ full 40 minute record
+    filter(n == 10)
+  df2sum = summarize(df2, 
+                     a.gross = sum(agg, na.rm = T),
+                     d.gross = sum(deg, na.rm = T),
+                     m.gross = sum(M, na.rm = T),
+                     nm.gross = sum(NM, na.rm = T)) %>% # sum for each cycle
+    right_join(., countyboi, by = "cycle") %>% # isolate grps w/ 40min records
+    dplyr::select(-n) %>% # remove obsolete variables
+    mutate(run = run)
+  
+  gci10.df <- rbind(gci10.df, df2sum)
+}
+
+# boxplots 
+boxplot(a.gross ~ run, data = gci10.df,
+        main = "Cumulative aggradation in 10 minutes",
+        col = alpha(colz, 0.7))
+
+boxplot((d.gross * -1) ~ run, data = gci10.df,
+        main = "Cumulative degradation in 10 minutes",
+        col = alpha(colz, 0.7))
+boxplot(m.gross ~ run, data = gci10.df,
+        main = "Cumulative morphologic change (M) in 10 minutes",
+        col = alpha(colz, 0.7))
+```
+
+<!-- Cumulative morphologic change in 40 minutes, i.e. longest cycle (sum all agg/deg/M/NM).  -->
+
+```{r gross_change_in_40_min, eval = F}
+# empty data frame for outputs
+cycle_len_s <- c(10, 10, 10, 20, 40)
+runs <- c(1, 6:9)
+
+gci4.df <- data.frame()
+
+for (i in 1:length(mylist)){
+  cycle_len <- cycle_len_s[i]
+  run <- runs[i]
+  
+  dfi <- mylist[[i]] %>% # pull data from main list of agg/deg vols (see above)
+    mutate(cycle40 = ceiling((cycle - 1)/(40/cycle_len)))
+  
+  # get sum for each cycle (i.e. deposition in min 1 + min2 + minN)
+  df2 = group_by(dfi, cycle40)
+  countyboi = tally(df2) %>% # isolate groups w/ full 40 minute record
+    filter(n == 40)
+  df2sum = summarize(df2, 
+                     a.gross = sum(agg, na.rm = T),
+                     d.gross = sum(deg, na.rm = T),
+                     m.gross = sum(M, na.rm = T),
+                     nm.gross = sum(NM, na.rm = T)) %>% # sum for each cycle
+    right_join(., countyboi, by = "cycle40") %>% # isolate grps w/ 40min records
+    dplyr::select(-n) %>% # remove obsolete variables
+    mutate(run = run)
+  
+  gci4.df <- rbind(gci4.df, df2sum)
+}
+
+# boxplots - not super meaningful with variable cycle duration. Look at 40 min instead!
+boxplot(a.gross ~ run, data = gci4.df,
+        main = "Cumulative aggradation in 40 minutes",
+        col = alpha(colz, 0.7))
+
+boxplot((d.gross * -1) ~ run, data = gci4.df,
+        main = "Cumulative degradation in 40 minutes",
+        col = alpha(colz, 0.7))
+boxplot(m.gross ~ run, data = gci4.df,
+        main = "Cumulative morphologic change (M) in 40 minutes",
+        col = alpha(colz, 0.7))
+```
+
+## Spatial patterns of erosion/deposition
+
+<!-- DoD Sum: Sum all 1-min DoDs, for high and low feed respectively. -->
+
+```{r sum_DoDs, include = F, eval = F}
+# done - just here for record-keeping.
+
+runs <- c(1, 6:9)
+repes <- c(2, rep(1, 4))
+drives <- c(drive1, rep(drive2, 4))
+
+# for high then low
+for(i in c("high", "low")){
+  # for each run
+  for(j in 1:length(runs)){
+    run <- runs[j]
+    repe <- repes[j]
+    drive <- drives[j]
+    
+    # get timesteps of high/low feed
+    if(i == "high"){
+      steps <- mylist[[j]] %>%
+        filter(time_in_cycle <= max(time_in_cycle / 2))
+      steps_t1 <- pull(steps, t1) %>%
+        `[`(1:(length(.)-1))
+      steps_t2 <- pull(steps, t2) %>%
+        `[`(1:(length(.)-1))
+    } else {
+      steps <- mylist[[j]] %>%
+        filter(time_in_cycle > max(time_in_cycle / 2))
+      steps_t1 <- pull(steps, t1) %>%
+        `[`(1:(length(.)-1))
+      steps_t2 <- pull(steps, t2) %>%
+        `[`(1:(length(.)-1))
+    }
+    
+    # import smoothed DoDs as stack
+    rstack <- raster::stack(
+      paste0(
+        drive, ":/Experiments/Processing/Run", run, "/Run", run,
+        "_rep", repe, "/_1min_intervals/summary_data/DoD/", steps_t2,
+        "-", steps_t1, ".tif"),
+      quick = T
+    )
+
+    # sum all rasters in stack
+    raster_sum <- calc(rstack, fun=sum, na.rm = T)
+    
+    # save summary raster outputs
+    if (!dir.exists(
+      paste0( drive, ":/Experiments/Processing/Run", 
+              run, "/Run", run, "_rep", repe,
+              "/_1min_intervals/summary_data/DoD/DoD_summary"))) {
+      dir.create(
+        paste0( drive, ":/Experiments/Processing/Run", 
+                run, "/Run", run, "_rep", repe,
+                "/_1min_intervals/summary_data/DoD/DoD_summary"))}
+    
+    writeRaster(raster_sum, 
+                filename = paste0( 
+                  drive, ":/Experiments/Processing/Run", 
+                  run, "/Run", run, "_rep", repe,
+                  "/_1min_intervals/summary_data/DoD/DoD_summary/Run", 
+                  run, "_rep", repe, "_", i, "_feed_DoDsum.tif"),
+                format = "GTiff",
+                overwrite = TRUE)
+    print(paste0("Run ", run, " ", i, " feed sum done!"))
+    # checky <- raster(paste0( 
+    #               drive, ":/Experiments/Processing/Run", 
+    #               run, "/Run", run, "_rep", repe,
+    #               "/_1min_intervals/summary_data/DoD/DoD_summary/Run", 
+    #               run, "_rep", repe, "_", i, "_feed_DoDsum.tif"))
+  }
+}
+
+```
+
+```{r plot_DoD_sum, eval = F}
+runs <- c(1, 6:9)
+repes <- c(2, rep(1, 4))
+drives <- c(drive1, rep(drive2, 4))
+
+par(mfrow = c(2, 5),
+    mai = c(0.1, 0.1, 0.1, 0),
+    oma = c(2, 2, 0, 0))
+
+# for high then low
+for(i in c("high", "low")){
+  # for each run
+  for(j in 1:length(runs)){
+    run <- runs[j]
+    repe <- repes[j]
+    drive <- drives[j]
+    
+    raster_sum <- raster(
+      paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+             repe,"/_1min_intervals/summary_data/DoD/DoD_summary/Run", 
+                  run, "_rep", repe, "_", i, "_feed_DoDsum.tif"))
+    
+    plot(raster_sum, 
+         col = colorRampPalette(brewer.pal(10, "RdBu"))(20),
+         breaks = seq(-0.1, 0.1, len = 21),
+         legend = F)
+    title(main = paste0("Run ", run, " ", i, " feed"),
+          line = -1.5)
+    
+    
+  }
+}
+
+plot(raster_sum,
+     legend.only=TRUE,
+     col = colorRampPalette(brewer.pal(10, "RdBu"))(20),
+     breaks = seq(-0.1, 0.1, len = 21),
+     axis.args=list(at=seq(-4, 16, 4),
+                    cex.axis=0.8),
+     legend.args=list(
+       text='Cumulative agg/deg', side=4, font=2, line=1.8, cex=0.9),
+     smallplot=c(0.88,0.89, 0.1,0.9))
+
+```
+
+Mean of all 1-min DoDs, for high and low feed respectively:
+
+```{r mean_DoDs, include = T, eval = F}
+# done - just here for record-keeping.
+
+runs <- c(1, 6:9)
+repes <- c(2, rep(1, 4))
+drives <- c(drive1, rep(drive2, 4))
+
+# for high then low
+for(i in c("high", "low")){
+  # for each run
+  for(j in 1:length(runs)){
+    run <- runs[j]
+    repe <- repes[j]
+    drive <- drives[j]
+    
+    # get timesteps of high/low feed
+    if(i == "high"){
+      steps <- mylist[[j]] %>%
+        filter(time_in_cycle <= max(time_in_cycle / 2))
+      steps_t1 <- pull(steps, t1) %>%
+        `[`(1:(length(.)-1))
+      steps_t2 <- pull(steps, t2) %>%
+        `[`(1:(length(.)-1))
+    } else {
+      steps <- mylist[[j]] %>%
+        filter(time_in_cycle > max(time_in_cycle / 2))
+      steps_t1 <- pull(steps, t1) %>%
+        `[`(1:(length(.)-1))
+      steps_t2 <- pull(steps, t2) %>%
+        `[`(1:(length(.)-1))
+    }
+    
+    # import smoothed DoDs as stack
+    rstack <- raster::stack(
+      paste0(
+        drive, ":/Experiments/Processing/Run", run, "/Run", run,
+        "_rep", repe, "/_1min_intervals/summary_data/DoD/", steps_t2,
+        "-", steps_t1, ".tif"),
+      quick = T
+    )
+
+    # take mean of all rasters in stack
+    raster_sum <- calc(rstack, fun=mean, na.rm = T)
+    
+    # save summary raster outputs
+    if (!dir.exists(
+      paste0( drive, ":/Experiments/Processing/Run", 
+              run, "/Run", run, "_rep", repe,
+              "/_1min_intervals/summary_data/DoD/DoD_summary"))) {
+      dir.create(
+        paste0( drive, ":/Experiments/Processing/Run", 
+                run, "/Run", run, "_rep", repe,
+                "/_1min_intervals/summary_data/DoD/DoD_summary"))}
+    
+    writeRaster(raster_sum, 
+                filename = paste0( 
+                  drive, ":/Experiments/Processing/Run", 
+                  run, "/Run", run, "_rep", repe,
+                  "/_1min_intervals/summary_data/DoD/DoD_summary/Run", 
+                  run, "_rep", repe, "_", i, "_feed_DoDmean.tif"),
+                format = "GTiff",
+                overwrite = TRUE)
+    print(paste0("Run ", run, " ", i, " feed mean done!"))
+    # checky <- raster(paste0( 
+    #               drive, ":/Experiments/Processing/Run", 
+    #               run, "/Run", run, "_rep", repe,
+    #               "/_1min_intervals/summary_data/DoD/DoD_summary/Run", 
+    #               run, "_rep", repe, "_", i, "_feed_DoDmean.tif"))
+  }
+}
+
+```
+
+```{r plot_DoD_mean}
+runs <- c(1, 7:9)
+repes <- c(2, rep(1, 3))
+drives <- c(drive1, rep(drive2, 3))
+
+png(paste0(outfiles, "/spatial_erosion_deposition.png"),
+     width = 1300, height = 600)
+
+par(mfrow = c(2, 4),
+    mai = c(0.4, 0.4, 0.1, 0.1),
+    oma = c(1, 1, 1, 7))
+
+# for high then low
+for(i in c("high", "low")){
+  # for each run
+  for(j in 1:length(runs)){
+    run <- runs[j]
+    repe <- repes[j]
+    drive <- drives[j]
+    
+    raster_sum <- raster(
+      paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+             repe,"/_1min_intervals/summary_data/DoD/DoD_summary/Run", 
+                  run, "_rep", repe, "_", i, "_feed_DoDmean.tif"))
+    
+    # import mask for 18 hr fan
+    msk <- raster(
+      paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
+             repe,"/_1min_intervals/DoD_binary/DoD_binary1800.tif"))
+    
+    # multiply
+    raster_sum <- raster_sum * msk * 1000 # unit conversion to mm
+    
+    
+    plot(raster_sum, 
+         col = colorRampPalette(brewer.pal(10, "RdBu"))(16),
+         breaks = seq(-8, 8, len = 17),
+         legend = F,
+         cex.axis = 2)
+    
+    # circle overlay
+    rad <- 2 #radius in m
+    xline <- seq(0, rad, by = 0.001)
+    yline <- sqrt(rad ^ 2 - xline ^ 2)
+    lines(xline,yline,
+          lty = 2)
+    
+    # title
+    if(run == 1){
+      title(main = "Run 1, half data",
+          line = -1.5,
+          cex.main = 2)
+    } else {
+      title(main = paste0("Run ", run, " ", i, " feed"),
+          line = -1.5,
+          cex.main = 2)
+    }
+    
+  }
+}
+
+par(mfrow = c(1,1),
+    oma = c(2, 2, 0, 2.5))
+plot(raster_sum,
+     legend.only=TRUE,
+     col = colorRampPalette(brewer.pal(10, "RdBu"))(16),
+     breaks = seq(-8, 8, len = 17),
+     axis.args=list(cex.axis=1.8#,
+                    # at=seq(-4, 16, 4)
+                    ),
+     legend.args=list(
+       text='Mean deposition/erosion depth (mm)', side=4, font=1, line=3, cex=1.8),
+     smallplot=c(0.97,0.98, 0.1,0.9))
+
+dev.off()
+
+```
+
+<!-- # Interrelations -->
+
+<!-- ### Does Fn correlate with slope?  -->
+
+<!-- I.e. does steeper fan = more instability? -->
+
+<!-- Short answer: No. Strongest relation for run 9, r.squared = 0.04. R.squared increases to 0.2 when only no-feed data considered and slope is lagged by 2 min. Makes sense: channel more stable, slope reduces as erosion more concentrated at fanhead. -->
+
+```{r Fn_vs_slope, eval = F}
+# Join slope and fn df by timestamp
+slope_fn_join <- full_join(slope_df, fn_df, by = c("t_min", "run", "time_in_cycle")) %>%
+  # add column with pos slope, for convenience
+  mutate(slope_pos = slope_50pc * -1) %>%
+  
+  # lag fn by 1, 2, 3 mins to look at effects of delayed response:
+  mutate(fn = new_area_normby_t2_fan * 100) %>%
+  mutate(fn.lag1 = lag(fn, 1)) %>%
+  mutate(fn.lag2 = lag(fn, 2)) %>%
+  mutate(fn.lag3 = lag(fn, 3)) %>%
+  mutate(slope.lag1 = lag(slope_pos, 1)) %>%
+  mutate(slope.lag2 = lag(slope_pos, 2)) %>%
+  mutate(slope.lag3 = lag(slope_pos, 3))
+
+# subset for run 9 (others have non-sig relations)
+ss9 <- slope_fn_join %>%  
+  filter(run == 9)
+
+# plot slope vs fn lag 2
+plot(ss9$slope_pos, ss9$fn.lag2, 
+     col = alpha("black", 0.5),
+     pch = 19)
+
+# strength of correlation, slope against fn lag 2
+mod <- lm(ss9$fn.lag2 ~ ss9$slope_pos)
+summary(mod)
+abline(mod)
+
+# try grouping by feed:
+ss9high <- ss9 %>%
+  filter(time_in_cycle < 21)
+
+# plot slope vs fn lag 2
+plot(ss9high$slope_pos, ss9high$fn.lag2, 
+     col = alpha("black", 0.5),
+     pch = 19)
+
+# strength of correlation, slope against fn lag 2
+mod <- lm(ss9high$fn.lag2 ~ ss9high$slope_pos)
+summary(mod)
+abline(mod)
+
+ss9low <- ss9 %>%
+  filter(time_in_cycle >= 21)
+
+# plot slope lag 2 vs fn 
+plot(ss9low$slope.lag2, ss9low$fn, 
+     col = alpha("black", 0.5),
+     pch = 19)
+
+# strength of correlation, slope lag 2 against fn 
+mod <- lm(ss9low$fn ~ ss9low$slope.lag2)
+summary(mod)
+abline(mod)
+
+
+```
+
+<!-- ### Do M, agg or deg correlate with slope? -->
+
+<!-- Agg: VERY weak correlation. r^2 < 0.1. Strongest for run 9. -->
+
+```{r agg_vs_slope, eval = F}
+# first, prune inputs:
+slope_tidy <- slope_df %>%
+  rename(t2 = "tvec") %>%
+  select(t2, slope_50pc, cycle, time_in_cycle, run)
+
+mad_tidy <- mad.df %>%
+  select(-t1, -t_sec, -t_min, -t_hr)
+
+# Join slope and m/agg/deg df by timestamp
+slope_mad_join <- full_join(slope_tidy, mad_tidy) %>%
+  # add column with pos slope, for convenience
+  mutate(slope_pos = slope_50pc * -1) %>%
+  # filter to high/zero feed runs:
+  filter(run == 9)
+
+# strength of correlation, agg against slope lag 1
+mod <- lm(lag(slope_mad_join$slope_pos) ~ slope_mad_join$agg)
+summary(mod)
+
+
+# plot agg vs slope, lag 1
+plot(slope_mad_join$agg, lag(slope_mad_join$slope_pos), 
+     col = alpha("black", 0.5),
+     pch = 19,
+     main = paste0("Run ", unique(slope_mad_join$run)))
+abline(mod)
+legend("bottomright", legend = paste0("R.squ = ", summary(mod)$adj.r.squared))
+
+
+```
+
+# To do: 
+
+---
+
+
+DoDs:
+  
+* Spatial patterns revealed through 
+  + PCA? Need to replace all NAs with 0 first...
+  
+Interrelations:
+
+* When does/doesn't agg/deg correlate with Fn? I.e. is correlation stronger/weaker in feed / no feed periods?
