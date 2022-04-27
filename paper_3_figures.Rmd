@@ -1,5 +1,5 @@
 ---
-title: 'Paper 3 possibilities'
+title: 'Paper 3 plots / data exploration'
 author: "Anya Leenman"
 output:
   html_document:
@@ -33,7 +33,7 @@ outfiles <- paste0(drive2, ":/Experiments/writing/3_feed_duration/figures")
 ```
 Nov 2020.
 
-Initial plots for third paper with constant feed, varied sediment supply. Trying to decide if I should compare runs 1-6-7 or runs 1-7-8-9...
+Plots for third PhD paper with constant feed, varied sediment supply. Trying to decide if I should compare runs 1-6-7 or runs 1-7-8-9...
 
 Runs 1, 6 and 7 (varying amplitude of feed variations) compared with runs 1, 7, 8 and 9 (varying duration of on/off phases) - analogous to varying period but holding amplitude constant.
 
@@ -133,10 +133,9 @@ lines(run9,
       lwd = 2)
 
 mtext(text = "Time in experiment (minutes)", side = 1, outer = T, line = 0)
-mtext(text = "Feed rate (g/s)", side = 2, outer = T, line = 0)
+mtext(text = "Sediment supply rate (g/s)", side = 2, outer = T, line = 0)
 dev.off()
 ```
-
 
 # Median fan slope:
 <!-- Data wrangling: -->
@@ -349,83 +348,85 @@ dev.off()
 Temporal trend through low/high feed periods:
 ```{r, echo = F}
 # 1) amplitude case----------------
-# par(mfrow = c(1, 3))
-# exps <- list(run1, run6, run7)
-# 
-# for(i in 1:length(exps)){
-#   dat <- exps[[i]]
-#   # blank axes
-#   plot(0:10, 
-#        abs(dat$slope_50pc)[6:16],
-#        type = "n",
-#        xlab = "",
-#        ylab = "",
-#        ylim = c(0.055, 0.08))
-#   
-#   # line to delineate low/high feed
-#   if(i == 2){
-#     abline(v = 0.5, lty = 2,
-#            col = "gray80")
-#     abline(v = 5.5, lty = 2,
-#            col = "gray50")
-#     # labels
-#     text(3, 0.06, "High feed")
-#     text(8, 0.06, "Low feed")
-#   } else if(i == 3){
-#     abline(v = 0.5, lty = 2,
-#            col = "gray80")
-#     abline(v = 5.5, lty = 2,
-#            col = "gray50")
-#     # labels
-#     text(3, 0.06, "V. High feed")
-#     text(8, 0.06, "No feed")
-#   }
-# 
-#   
-#   # add lines for each cycle
-#   for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
-#     lines(c(0,
-#             abs(dat$time_in_cycle)[dat$cycle == j]), 
-#           c(abs(dat$slope_50pc)[dat$cycle == (j-1) & dat$time_in_cycle == 10],
-#             abs(dat$slope_50pc)[dat$cycle == j]),
-#           #lwd = 0.5,
-#           col = alpha(colz[i], 0.4))
-#   }
-#   
-#   # get mean for group; add to plot
-#   df2 = group_by(dat, time_in_cycle)
-#   df2m = summarize(df2, mean_of_medians = mean(abs(slope_50pc)))
-#   lines(0:10,
-#         c(pull(df2m[10, 2]), pull(df2m[,2])),
-#         col = darken(colz[i], amount = 0.4, space = "combined"),
-#         lwd = 2)
-#   
-#   # annotations
-#   Run.no <- paste0("R", dat$run[1])
-#   
-#   if(i == 1){
-#     legend("topright",
-#            bty = "n",
-#            legend = c("Single cycle", "Ensemble mean"),
-#            lwd = c(1, 2),
-#            col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
-#            title = Run.no,
-#            text.font = 3
-#     )
-#   } else {
-#     legend("topright",
-#            bty = "n",
-#            legend = NA,
-#            title = Run.no
-#     )
-#   }
-# }
-# title(main = "Median slope with varying feed amplitude",
-#       outer = T,
-#       line = -2)
-# mtext(side = 1, text = "Time in cycle (mins)",
-#       outer = T, line = -2)
-# mtext(text = "Median fan slope", side = 2, outer = T, line = -2)
+png(paste0(outfiles, "/Run167_slope_vs_timeincycle.png"),
+     width = 7, height = 4, units = 'in', res = 300, type = 'cairo')
+par(mfrow = c(1, 3),
+    mai = c(0.4, 0.4, 0.1, 0.1),
+    oma = c(1, 1, 0, 0))
+exps <- list(run1, run6, run7)
+
+for(i in 1:length(exps)){
+  dat <- exps[[i]]
+  # blank axes
+  plot(0:10,
+       abs(dat$slope_50pc)[6:16],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0.055, 0.08))
+
+  # line to delineate low/high feed
+  if(i == 2){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = 5.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(3, 0.06, "High supply")
+    text(8, 0.06, "Low supply")
+  } else if(i == 3){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = 5.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(3, 0.06, "V. High supply")
+    text(8, 0.06, "Zero supply")
+  }
+
+
+  # add lines for each cycle
+  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
+    lines(c(0,
+            abs(dat$time_in_cycle)[dat$cycle == j]),
+          c(abs(dat$slope_50pc)[dat$cycle == (j-1) & dat$time_in_cycle == 10],
+            abs(dat$slope_50pc)[dat$cycle == j]),
+          #lwd = 0.5,
+          col = alpha(colz[i], 0.4))
+  }
+
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, mean_of_medians = mean(abs(slope_50pc)))
+  lines(0:10,
+        c(pull(df2m[10, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+
+  # annotations
+  Run.no <- paste0("R", dat$run[1])
+
+  if(i == 1){
+    legend("topright",
+           bty = "n",
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+           title = Run.no,
+           text.font = 3
+    )
+  } else {
+    legend("topright",
+           bty = "n",
+           legend = NA,
+           title = Run.no
+    )
+  }
+}
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = -0.5)
+mtext(text = "Median fan slope", side = 2, outer = T, line = -0.5)
+dev.off()
 
 #-------
 # 2) Duration case 
@@ -466,8 +467,8 @@ for(i in 1:length(exps)){
     abline(v = cycle.len/2 + 0.5, lty = 2,
            col = "gray50")
     # labels
-    text(cycle.len/4, 0.055, "H-F", cex = 2)
-    text(cycle.len/2 + cycle.len/4, 0.055, "0-F", cex = 2)
+    text(cycle.len/4, 0.055, "H-S", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.055, "0-S", cex = 2)
   }
   
   
@@ -774,8 +775,8 @@ for(i in 1:length(exps)){
     abline(v = cycle.len/2 + 0.5, lty = 2,
            col = "gray50")
     # labels
-    text(cycle.len/4, 0.06, "H-F", cex = 2)
-    text(cycle.len/2 + cycle.len/4, 0.06, "0-F", cex = 2)
+    text(cycle.len/4, 0.06, "H-S", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.06, "0-S", cex = 2)
   }
 
 
@@ -1554,7 +1555,7 @@ for(i in c("high", "low")){
          col = rev(colorRampPalette(brewer.pal(9, "YlGnBu"))(20)),
          breaks = seq(0, ras_num, len = 21),
          legend = F)
-    legend("topright", legend = paste0("Run ", run, " ", i, " feed"),
+    legend("topright", legend = paste0("Run ", run, " ", i, " supply"),
            cex = 2)
     
     # fancy colour bar
@@ -1575,7 +1576,7 @@ dev.off()
 
 ### Number of channels
 
-```{r cross-section data wrangling 0.5 m,eval=F}
+```{r cross-section data wrangling 0.5 m,eval=T}
 # empty list
 mylist <- list()
 
@@ -1662,8 +1663,8 @@ for(i in c(1, 3:5)){
     abline(v = cycle.len/2 + 0.5, lty = 2,
            col = "gray50")
     # labels
-    text(cycle.len/4, 0.12, "H-F", cex = 2)
-    text(cycle.len/2 + cycle.len/4, 0.12, "0-F", cex = 2)
+    text(cycle.len/4, 0.12, "H-S", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.12, "0-S", cex = 2)
   }
 
 
@@ -1885,8 +1886,8 @@ for(i in c(1, 3:5)){
     abline(v = cycle.len/2 + 0.5, lty = 2,
            col = "gray50")
     # labels
-    text(cycle.len/4, 0.12, "H-F", cex = 2)
-    text(cycle.len/2 + cycle.len/4, 0.12, "0-F", cex = 2)
+    text(cycle.len/4, 0.12, "H-S", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.12, "0-S", cex = 2)
   }
 
 
@@ -2113,8 +2114,8 @@ for(i in c(1, 3:5)){
     abline(v = cycle.len/2 + 0.5, lty = 2,
            col = "gray50")
     # labels
-    text(cycle.len/4, 0.05, "H-F", cex = 2)
-    text(cycle.len/2 + cycle.len/4, 0.05, "0-F", cex = 2)
+    text(cycle.len/4, 0.05, "H-S", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.05, "0-S", cex = 2)
   }
 
 
@@ -2401,8 +2402,8 @@ for(i in c(1, 3:5)){
     abline(v = cycle.len/2 + 0.5, lty = 2,
            col = "gray50")
     # labels
-    text(cycle.len/4, 0.12, "H-F", cex = 2)
-    text(cycle.len/2 + cycle.len/4, 0.12, "0-F", cex = 2)
+    text(cycle.len/4, 0.12, "H-S", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.12, "0-S", cex = 2)
   }
   
   
@@ -2802,8 +2803,8 @@ for(i in c(1, 3:5)){
     abline(v = cycle.len/2 + 0.5, lty = 2,
            col = "gray50")
     # labels
-    text(cycle.len/4, -3, "H-F", cex = 2)
-    text(cycle.len/2 + cycle.len/4, -3, "0-F", cex = 2)
+    text(cycle.len/4, -3, "H-S", cex = 2)
+    text(cycle.len/2 + cycle.len/4, -3, "0-S", cex = 2)
   }
 
 
@@ -4126,12 +4127,18 @@ runs <- c(1, 7:9)
 repes <- c(2, rep(1, 3))
 drives <- c(drive1, rep(drive2, 3))
 
-png(paste0(outfiles, "/spatial_erosion_deposition.png"),
-     width = 1300, height = 600)
+# png(paste0(outfiles, "/spatial_erosion_deposition.png"),
+#      width = 1300, height = 600)
+# 
+png(paste0(outfiles, "/spatial_erosion_deposition1.png"),
+     width = 8, 3.5, units = 'in', res = 600, type = 'cairo')
 
+# par(mfrow = c(2, 4),
+#     mai = c(0.4, 0.4, 0.1, 0.1),
+#     oma = c(1, 1, 1, 7))
 par(mfrow = c(2, 4),
-    mai = c(0.4, 0.4, 0.1, 0.1),
-    oma = c(1, 1, 1, 7))
+    mai = c(0.05, 0, 0.05, 0),
+    oma = c(0.1, 1, 0.1, 5))
 
 # for high then low
 for(i in c("high", "low")){
@@ -4159,7 +4166,7 @@ for(i in c("high", "low")){
          col = colorRampPalette(brewer.pal(10, "RdBu"))(16),
          breaks = seq(-8, 8, len = 17),
          legend = F,
-         cex.axis = 2)
+         axes = F)
     
     # circle overlay
     rad <- 2 #radius in m
@@ -4170,13 +4177,13 @@ for(i in c("high", "low")){
     
     # title
     if(run == 1){
-      title(main = "Run 1, half data",
-          line = -1.5,
-          cex.main = 2)
+      title(main = "           Run 1, half data",
+          line = -1,
+          cex.main = 1)
     } else {
-      title(main = paste0("Run ", run, " ", i, " feed"),
-          line = -1.5,
-          cex.main = 2)
+      title(main = paste0("           Run ", run, " ", i, " supply"),
+          line = -1,
+          cex.main = 1)
     }
     
   }
@@ -4188,11 +4195,11 @@ plot(raster_sum,
      legend.only=TRUE,
      col = colorRampPalette(brewer.pal(10, "RdBu"))(16),
      breaks = seq(-8, 8, len = 17),
-     axis.args=list(cex.axis=1.8#,
+     axis.args=list(cex.axis=1.1#,
                     # at=seq(-4, 16, 4)
                     ),
      legend.args=list(
-       text='Mean deposition/erosion depth (mm)', side=4, font=1, line=3, cex=1.8),
+       text='Mean deposition/erosion depth (mm)', side=4, font=1, line=2, cex=1),
      smallplot=c(0.97,0.98, 0.1,0.9))
 
 dev.off()
