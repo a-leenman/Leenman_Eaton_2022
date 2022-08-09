@@ -21,6 +21,7 @@ library(colorspace)
 library(RColorBrewer)
 library(raster)
 library(RStoolbox)
+library(tidyr)
 
 drive1 <- "E"
 drive2 <- "D"
@@ -107,7 +108,7 @@ lines(run7,
 legend(10, 16,
        bty = "n",
        ncol = 4,
-       legend = c("Run 1", "Run 7", "Run 8", "Run 9"),
+       legend = c("CON", "OSC10", "OSC20", "OSC40"),
        col = colz[c(1, 3:5)],
        lwd = 2)
 
@@ -144,24 +145,29 @@ dev.off()
 # import slope data for each run
 #----------------
 run <- 1
-repe <- 2
-run1 <- read.csv(
-  paste0(drive1, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, 
-         "/_1min_intervals/t_series/Recalculating_slope/Slope_length_curv.csv")) %>%
-  dplyr::select(tvec, contains("slope")) %>% # select relevant variables
-  mutate(t_h = ifelse((tvec %% 100) == 0, tvec / 100, floor (tvec / 100))) %>% # get hour
-  mutate(t_m = ifelse((tvec %% 100) == 0, 0, tvec - t_h * 100)) %>% # get minute
-  mutate(time = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
-  mutate(time = hm(time)) %>% # convert to time format using lubridate
-  mutate(t_sec = period_to_seconds(time)) %>% # Convert to number of seconds since start
-  mutate(t_min = t_sec / 60) %>% # time in minutes
-  mutate(t_hr = t_min / 60) %>% # time in hours
-  dplyr::select(-time, -t_h, -t_m) %>% # remove unnecessary columns
-  #filter(complete.cases(.)) %>% # get rid of rows with NA.
-  # divide into 10 minute periods (coded so that high feed is START):
-  mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
-  mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
-  mutate(run = run)
+run1 <- data.frame()
+for(repnum in 1:3){
+  repe <- repnum
+  run1_rep_i <- read.csv(
+    paste0(drive1, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, 
+           "/_1min_intervals/t_series/Recalculating_slope/Slope_length_curv.csv")) %>%
+    dplyr::select(tvec, contains("slope")) %>% # select relevant variables
+    mutate(t_h = ifelse((tvec %% 100) == 0, tvec / 100, floor (tvec / 100))) %>% # get hour
+    mutate(t_m = ifelse((tvec %% 100) == 0, 0, tvec - t_h * 100)) %>% # get minute
+    mutate(time = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
+    mutate(time = hm(time)) %>% # convert to time format using lubridate
+    mutate(t_sec = period_to_seconds(time)) %>% # Convert to number of seconds since start
+    mutate(t_min = t_sec / 60) %>% # time in minutes
+    mutate(t_hr = t_min / 60) %>% # time in hours
+    dplyr::select(-time, -t_h, -t_m) %>% # remove unnecessary columns
+    #filter(complete.cases(.)) %>% # get rid of rows with NA.
+    # divide into 10 minute periods (coded so that high feed is START):
+    mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+    mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+    mutate(run = run) %>%
+    mutate(exprep = repe)
+  run1 <- rbind(run1, run1_rep_i)
+}
 
 run <- 6
 repe <- 1
@@ -181,7 +187,8 @@ run6 <- read.csv(
   # divide into 10 minute periods (coded so that high feed is START):
   mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
   mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
-  mutate(run = run)
+  mutate(run = run) %>%
+  mutate(exprep = repe)
 run <- 7
 run7 <- read.csv(
   paste0(drive2, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, 
@@ -199,7 +206,8 @@ run7 <- read.csv(
   # divide into 10 minute periods (coded so that high feed is START):
   mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
   mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
-  mutate(run = run)
+  mutate(run = run) %>%
+  mutate(exprep = repe)
 run <- 8
 run8 <- read.csv(
   paste0(drive2, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, 
@@ -217,7 +225,8 @@ run8 <- read.csv(
   # divide into 20 minute periods (coded so that high feed is START):
   mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
   mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
-  mutate(run = run)
+  mutate(run = run) %>%
+  mutate(exprep = repe)
 run <- 9
 run9 <- read.csv(
   paste0(drive2, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, "/_1min_intervals/t_series/Recalculating_slope/Slope_length_curv.csv"))%>%
@@ -234,11 +243,27 @@ run9 <- read.csv(
   # divide into 40 minute periods (coded so that high feed is START):
   mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
   mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
-  mutate(run = run)
+  mutate(run = run) %>%
+  mutate(exprep = repe)
 
 slope_dat <- list(run1, run6, run7, run8, run9)
 slope_df <- bind_rows(slope_dat) #%>%
   #mutate(run.t = paste(t_min, run, sep = "_"))
+
+#export clean versions for FRDR
+runs <- c(1,6,7,8,9)
+drives <- c(drive1, rep(drive2, 4))
+for(r_num in 1:length(runs)){
+  run <- runs[r_num]
+  drive <- drives[r_num]
+  cleandata <- slope_dat[[r_num]] %>%
+    dplyr::select(tvec, slope_50pc, t_sec,t_min,t_hr, run, exprep)%>%
+    rename(median_slope = slope_50pc, time_step_hhmm_format = tvec, time_in_sec = t_sec,
+           time_in_min = t_min, time_in_hrs = t_hr) %>%
+    mutate(median_slope = median_slope * -1)
+  write.csv(cleandata, file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, "/_1min_intervals/t_series/Recalculating_slope/Run", run, 
+                    "_all_repeats_slope.csv"), row.names = F)
+}
 ```
 
 Comparing temporal trends in median slope:
@@ -277,7 +302,7 @@ legend("topleft", legend = c("Run 1", "Run 7", "Run 8", "Run 9"),
 And now boxplots: 
 
 Statistical tests should not be applied: data are temporally autocorrelated. Have tried to reduce impact by sampling every fifth timestep for box plot. If I increase the sampling interval further, I end up only sampling high/low slope periods, which would be misleading.
-```{r, echo = F}
+```{r, echo = F, eval = F}
 
 # first, test for autocorrelation in run1:
 mod1 <- lm(run1$slope_50pc * -1 ~ run1$t_min)
@@ -308,7 +333,7 @@ boxplot(slope_50pc*-1 ~ run, data = slope50_1_7_8_9,
         #main = "median slope, varying duration, sampling every minute",
         col = alpha(colz[c(1, 3:5)], 0.7),
         xlab = "Run",
-        ylab = expression("Median fan slope (m m"^-2*")"),
+        ylab = expression("Median fan slope (m m"^-1*")"),
         par(cex.lab=1.5, cex.axis=1.5), 
         outcex = 1.5
         )
@@ -347,13 +372,16 @@ dev.off()
 
 Temporal trend through low/high feed periods:
 ```{r, echo = F}
+alphas <- c(0.15, rep(0.4, 4)) # set alpha for run 1 slightly lower
+
 # 1) amplitude case----------------
 png(paste0(outfiles, "/Run167_slope_vs_timeincycle.png"),
      width = 7, height = 4, units = 'in', res = 300, type = 'cairo')
 par(mfrow = c(1, 3),
-    mai = c(0.4, 0.4, 0.1, 0.1),
-    oma = c(1, 1, 0, 0))
+    mai = c(0.4, 0.3, 0.1, 0.1),
+    oma = c(1, 1.5, 0, 0))
 exps <- list(run1, run6, run7)
+runnames <- c('CON', 'OSC10LA', 'OSC10')
 
 for(i in 1:length(exps)){
   dat <- exps[[i]]
@@ -363,7 +391,7 @@ for(i in 1:length(exps)){
        type = "n",
        xlab = "",
        ylab = "",
-       ylim = c(0.055, 0.08))
+       ylim = c(0.0555, 0.077))
 
   # line to delineate low/high feed
   if(i == 2){
@@ -384,16 +412,22 @@ for(i in 1:length(exps)){
     text(8, 0.06, "Zero supply")
   }
 
-
-  # add lines for each cycle
-  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
-    lines(c(0,
-            abs(dat$time_in_cycle)[dat$cycle == j]),
-          c(abs(dat$slope_50pc)[dat$cycle == (j-1) & dat$time_in_cycle == 10],
-            abs(dat$slope_50pc)[dat$cycle == j]),
-          #lwd = 0.5,
-          col = alpha(colz[i], 0.4))
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
+    # add lines for each cycle
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0,
+              abs(dat_i$time_in_cycle)[dat_i$cycle == j]),
+            c(abs(dat_i$slope_50pc)[dat_i$cycle == (j-1) & 
+                                      dat_i$time_in_cycle == 10],
+              abs(dat_i$slope_50pc)[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(colz[i], alphas[i]))
+    }
   }
+  
 
   # get mean for group; add to plot
   df2 = group_by(dat, time_in_cycle)
@@ -404,39 +438,50 @@ for(i in 1:length(exps)){
         lwd = 2)
 
   # annotations
-  Run.no <- paste0("R", dat$run[1])
+  Run.no <- runnames[i]
 
   if(i == 1){
-    legend("topright",
-           bty = "n",
+    legend("topleft",
+           box.col = 'white',
            legend = c("Single cycle", "Ensemble mean"),
            lwd = c(1, 2),
-           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
-           title = Run.no,
-           text.font = 3
+           col = c(alpha(colz[i], 0.4), darken(colz[i], amount = 0.4, space = "combined")),
+           text.font = 3,
+           cex = 1,
+           bg = 'white',
+           inset = 0.01
     )
-  } else {
-    legend("topright",
-           bty = "n",
-           legend = NA,
-           title = Run.no
-    )
-  }
+  } 
+  legend("topright",
+         box.col = 'white',
+         legend = c(signif (mean(abs(dat$slope_50pc)), 2), 
+                    signif (sd(abs(dat$slope_50pc)),1)),
+         title.font = 1,
+         title.col = 'black',
+         text.font = c(2, 3),
+         text.col = colz[i],
+         title = Run.no,
+         cex = 1,
+         bg = 'white',
+         inset = 0.01
+  )
 }
 mtext(side = 1, text = "Time in cycle (mins)",
       outer = T, line = -0.5)
-mtext(text = "Median fan slope", side = 2, outer = T, line = -0.5)
+mtext(text = expression("Median fan slope (m m"^-1*")"), 
+      side = 2, outer = T, line = -0.3)
 dev.off()
 
 #-------
 # 2) Duration case 
 exps <- list(run1, run7, run8, run9)# experiments to plot
 colz2 <- colz[c(1, 3:5)] # colours to use
+runnames <- c('CON', 'OSC10', 'OSC20', 'OSC40')
 
 png(paste0(outfiles, "/slope_vs_timeincycle.png"),
      width = 960, height = 480)
-par(mai = c(0.5,0.5,0.1,0.1),
-    oma = c(3, 3, 0, 0))
+par(mai = c(0.5,0.4,0.1,0.1),
+    oma = c(3, 2.5, 0, 0))
 layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
        
        # set unique subplot width for each experiment
@@ -445,8 +490,10 @@ layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
 # for each experiment:
 for(i in 1:length(exps)){
   dat <- exps[[i]] # get data for exp from main list
-  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
-  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  rep1sup <- dat %>%
+    dplyr::filter(exprep == 1)
+  start.row <- min(which(rep1sup$cycle==2)) # index of first row of first complete cycle (only for rep 1, as only needs calc once)
+  end.row <- max(which(rep1sup$cycle==2)) # index of last row of first complete cycle
   cycle.len <- (end.row + 1) - start.row 
   # blank axes
   plot(0:max(unique(dat$time_in_cycle)), 
@@ -454,7 +501,7 @@ for(i in 1:length(exps)){
        type = "n",
        xlab = "",
        ylab = "",
-       ylim = c(0.055, 0.075), # tweak
+       ylim = c(0.0555, 0.077), # tweak
        cex.axis = 2,
        xaxt = "n")
   # x-axis intervals
@@ -467,21 +514,26 @@ for(i in 1:length(exps)){
     abline(v = cycle.len/2 + 0.5, lty = 2,
            col = "gray50")
     # labels
-    text(cycle.len/4, 0.055, "H-S", cex = 2)
-    text(cycle.len/2 + cycle.len/4, 0.055, "0-S", cex = 2)
+    text(cycle.len/4, 0.0555, "H-S", cex = 2)
+    text(cycle.len/2 + cycle.len/4, 0.0555, "0-S", cex = 2)
   }
   
-  
-  # plot a line for each cycle
-  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
-    lines(c(0, # paste a 0 on the front, so t10 (or t_final) value in prev cycle 
-            # = t0 value in this cycle
-            abs(dat$time_in_cycle)[dat$cycle == j]), 
-          c(abs(dat$slope_50pc)[dat$cycle == (j-1) & dat$time_in_cycle == cycle.len],
-            abs(dat$slope_50pc)[dat$cycle == j]),
-          #lwd = 0.5,
-          col = alpha(colz2[i], 0.4))
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
+    # plot a line for each cycle
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0, # paste a 0 on the front, so t10 (or t_final) value in prev cycle 
+              # = t0 value in this cycle
+              abs(dat_i$time_in_cycle)[dat_i$cycle == j]), 
+            c(abs(dat_i$slope_50pc)[dat_i$cycle == (j-1) & dat_i$time_in_cycle == cycle.len],
+              abs(dat_i$slope_50pc)[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(colz2[i], alphas[i]))
+    }
   }
+ 
   
   # get mean for group; add to plot
   df2 = group_by(dat, time_in_cycle) # groups = min 1, min 2... finds mean at each minute
@@ -492,36 +544,241 @@ for(i in 1:length(exps)){
         lwd = 2)
   
   # annotations
-  Run.no <- paste0("R", dat$run[1])
+  Run.no <- runnames[i]
   
   if(i == 4){
-    legend("topright",
-           bty = "n",
+    legend("topleft",
+           box.col = 'white',
            legend = c("Single cycle", "Ensemble mean"),
            lwd = c(1, 2),
-           col = c(alpha(colz2[i], 0.4), darken(colz2[i], amount = 0.4, space = "combined")),
-           title = Run.no,
+           col = c(alpha(colz2[i], 0.6), darken(colz2[i], amount = 0.4, space = "combined")),
            text.font = 3,
-           cex = 2
+           cex = 2,
+           bg = 'white',
+           inset = 0.01
     )
-  } else {
-    legend("topright",
-           bty = "n",
-           legend = NA,
-           title = Run.no,
-           cex = 2
-    )
-  }
+  } 
+  legend("topright",
+         box.col = 'white',
+         legend = c(signif (mean(abs(dat$slope_50pc)), 2), 
+                    signif (sd(abs(dat$slope_50pc)),1)),
+         title.font = 1,
+         title.col = 'black',
+         text.font = c(2, 3),
+         text.col = colz2[i],
+         title = Run.no,
+         cex = 2,
+         bg = 'white',
+         inset = 0.01
+  )
 }
 
 # axis labels for whole plot, not subplots
 mtext(side = 1, text = "Time in cycle (mins)",
       outer = T, line = 0, cex = 1.5)
-mtext(text = expression("Median fan slope (m m"^-2*")"), 
+mtext(text = expression("Median fan slope (m m"^-1*")"), 
       side = 2, outer = T, line = 0, cex = 1.5)
 
 dev.off()
 
+```
+
+Comparing axial (45 degree) slope to mid-flank (e.g. 22.5 degree) slope:
+```{r axial_Vs_flank_wrangling, echo = F}
+# import axial, 23 and 67 degrees slope for all fans, all timesteps
+# empty list
+mylist <- list()
+poi <- c('p23', 'p45', 'p67') # profiles of interest
+
+# vector of runs/reps/drives
+repz <- c(3, 1, 1, 1, 1)
+runnames <- c("CON", "OSC10LA",   "OSC10", "OSC20", "OSC40")
+
+for(i in 1:length(runs)){
+  run <- runs[i]
+  nreps <- repz[i]
+  drive <- drives[i]
+  
+  if(i == 2){
+    next
+  }
+  
+  df_all <- data.frame()
+  for(repnum in 1:nreps){
+    repe <- repnum
+    t_list <- list.files(
+      paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe,
+             "/_1min_intervals/t_series/Recalculating_slope/profile_summaries"))
+    repdat <- data.frame()
+    # loop through each timestep to grab relevant slopes
+    for(tstep in 1:length(t_list)){
+      # time wrangling
+      tvec <- substr(t_list[tstep], 10, 13)
+      hr <- substr(tvec, 1, 2)
+      mn <- substr(tvec, 3, 4)
+      t_sec <- period_to_seconds(hm(paste0(hr, ':', mn))) # number of seconds since 0
+      # import relevant slope data, extracted from DEMs prior
+      stepdat <- read.csv(
+        paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe,
+               "/_1min_intervals/t_series/Recalculating_slope/profile_summaries/",
+               t_list[tstep])) %>% 
+        dplyr::filter(prof_names %in% poi) %>%
+        dplyr::select(prof_names, slope) %>%
+        mutate(slope = abs(slope), t_sec = t_sec) %>%
+        pivot_wider(names_from = prof_names, values_from = slope) %>%
+        cbind(data.frame(tvec = tvec), .) # export to df row
+      
+      repdat <- rbind(repdat, stepdat) # bind the rows
+    }
+    # assign timestamps / data identifiers
+    repdat <- repdat %>% 
+      mutate(t_min = t_sec/60, t_hr = t_min / 60) %>% 
+      mutate(exprep = repe, run = run) %>%
+      mutate(flank_av_slope = (p23 + p67)/2) %>% # average flank slope
+      mutate(ax_minus_flank = p45 - flank_av_slope) 
+    
+    # divide into high/low feed minute periods (coded so that high feed is START):
+    if(run < 8){
+      repdat <- repdat %>%
+        mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 5, "low", "high"))
+    } else if(run == 8){
+      repdat <- repdat %>%
+        mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 10, "low", "high"))
+    } else if(run == 9){
+      repdat <- repdat %>%
+        mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
+    }
+    df_all <- rbind(df_all, repdat) # bind all repeats into one df
+  }
+  df <- df_all
+  
+  # save df to list
+  mylist[[i]] <- df
+  
+  #export clean versions for FRDR
+  cleandata <- df %>%
+    dplyr::select(tvec, t_sec,t_min,t_hr, 
+                  cycle, time_in_cycle, run, exprep,
+                  p45, flank_av_slope, ax_minus_flank) %>%
+    rename(time_step_hhmm_format = tvec, time_in_sec = t_sec,
+           time_in_min = t_min, time_in_hrs = t_hr, min_in_cycle = time_in_cycle,
+           flank_gradient = flank_av_slope, axial_gradient = p45, gradient_difference = ax_minus_flank) 
+  write.csv(cleandata, 
+            file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, 
+                          "_rep", repe,
+                          "/_1min_intervals/t_series/Recalculating_slope/Run", 
+                          run, "_all_repeats_flank_vs_axial_slope.csv"), row.names = F)
+}
+```
+
+```{r axial_vs_flank_plot, echo = F}
+# plot cycles through time, as for other variables
+png(paste0(outfiles, "/flank_minus_axial_slope_vs_timeincycle.png"),
+     width = 960, height = 480)
+par(mai = c(0.5,0.4,0.1,0.1),
+    oma = c(3, 2.5, 0, 0))
+layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
+       widths = c(1, 1, 2, 4))
+
+for(i in c(1, 3:5)){
+  dat <- mylist[[i]]
+  rep1sup <- dat %>%
+    dplyr::filter(exprep == 1)
+  start.row <- min(which(rep1sup$cycle==2)) # index of first row of first complete cycle (only for rep 1, as only needs calc once)
+  end.row <- max(which(rep1sup$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)),
+       abs(dat$ax_minus_flank)[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(-0.01, 0.01),
+       cex.axis = 2,
+       xaxt = "n")
+  axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
+
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, -0.01, "H-S", cex = 2)
+    text(cycle.len/2 + cycle.len/4, -0.01, "0-S", cex = 2)
+  }
+
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
+    
+    # add lines for each cycle
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0,
+              dat_i$time_in_cycle[dat_i$cycle == j]),
+            c(dat_i$ax_minus_flank[dat_i$cycle == (j-1) &
+                                     dat_i$time_in_cycle == cycle.len],
+              dat_i$ax_minus_flank[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(colz[i], alphas[i]))
+    }
+  }
+
+  # get mean for group; add to plot
+  df2 = group_by(dat, time_in_cycle)
+  df2m = summarize(df2, mean_of_means = mean(ax_minus_flank))
+  lines(0:cycle.len,
+        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+  
+  # annotations
+  Run.no <- runnames[i]
+  
+  if(i == 5){
+    legend("topleft",
+           box.col = 'white',
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
+           text.font = 3,
+           cex = 2,
+           bg = 'white',
+           inset = 0.01
+    )
+  } 
+  legend("topright",
+         box.col = 'white',
+         legend = c(format(round(mean(dat$ax_minus_flank), 3), nsmall = 1), 
+                    signif (sd(dat$ax_minus_flank),1)),
+         title.font = 1,
+         title.col = 'black',
+         text.font = c(2, 3),
+         text.col = colz[i],
+         title = Run.no,
+         cex = 2,
+         bg = 'white',
+         inset = 0.01
+  )
+  
+}
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = 0, cex = 1.5)
+mtext(text = expression("Slope differential (m m"^-1*")"), 
+      side = 2, outer = T, line = 0, cex = 1.5)
+
+dev.off()
 ```
 
 # Lateral instability:
@@ -531,16 +788,21 @@ Did lateral instability rate (Fn) vary between exps?
 ```{r, echo = F}
 # Load Fn data
 run <- 1
-repe <- 2
-run1 <- read.csv(
+run1 <- data.frame()
+for(i in 1:3){
+  repe <- i
+  run1_rep_i <- read.csv(
     file = paste0(drive1, ":/Experiments/Processing/Run", run, "/Run", run, "_rep", 
                   repe, "/_1min_intervals/t_series/change_detection/Run", run, 
                   "_rep", repe, "_lag1_overlap_and_antioverlap.csv")) %>%
-  # divide into 10 minute periods (coded so that high feed is START):
-  mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
-  mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # Assign min in cycle
-  mutate(run = run) %>%
-  dplyr::select(-time)
+    # divide into 10 minute periods (coded so that high feed is START):
+    mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+    mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # Assign min in cycle
+    mutate(run = run) %>%
+    mutate(exprep = repe)
+  run1 <- rbind(run1, run1_rep_i)
+}
+
 
 run <- 6
 repe <- 1
@@ -552,7 +814,7 @@ run6 <- read.csv(
   mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
   mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
   mutate(run = run) %>%
-  dplyr::select(-time)
+    mutate(exprep = repe)
 
 run <- 7
 run7 <- read.csv(
@@ -563,7 +825,7 @@ run7 <- read.csv(
   mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
   mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
   mutate(run = run) %>%
-  dplyr::select(-time)
+    mutate(exprep = repe)
 
 run <- 8
 run8 <- read.csv(
@@ -574,7 +836,7 @@ run8 <- read.csv(
   mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
   mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
   mutate(run = run) %>%
-  dplyr::select(-time)
+    mutate(exprep = repe)
 
 run <- 9
 run9 <- read.csv(
@@ -585,13 +847,31 @@ run9 <- read.csv(
   mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
   mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
   mutate(run = run) %>%
-  dplyr::select(-time)
-
-# plot as above!
+    mutate(exprep = repe)
 
 fn_list <- list(run1, run6, run7, run8, run9)
 fn_df <- bind_rows(fn_list) #%>%
   #mutate(run.t = paste(t_min, run, sep = "_"))
+
+#export clean versions for FRDR
+runs <- c(1,6,7,8,9)
+repes <- rep(1, 5)
+drives <- c(drive1, rep(drive2, 4))
+for(r_num in 1:length(runs)){
+  run <- runs[r_num]
+  repe <- repes[r_num]
+  drive <- drives[r_num]
+  cleandata <- fn_list[[r_num]] %>%
+    dplyr::select(new_area_raw, new_area_normby_t2_fan, t_sec,t_min,t_hr, 
+                  cycle, time_in_cycle, time, run, exprep) %>%
+    rename(time_at_t2 = time, time_in_sec = t_sec,
+           time_in_min = t_min, time_in_hrs = t_hr,
+           new_area_m2 = new_area_raw, 
+           new_area_normalized_by_fan_area = new_area_normby_t2_fan, 
+           cycle_number = cycle, min_in_cycle = time_in_cycle) 
+  write.csv(cleandata, file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+                    "_all_repeats_Fn.csv"), row.names = F)
+}
 ```
 
 Comparing temporal trends in newly inundated area (Fn), expressed as a percentage of fan area:
@@ -743,19 +1023,21 @@ Temporal trend through low/high feed periods:
 # 2) Duration case
 exps <- list(run1, run7, run8, run9)
 colz2 <- colz[c(1, 3:5)]
-alphas <- c(0.2, rep(0.4, 3)) # set alpha for run 1 slightly lower
+runnames <- c("CON",   "OSC10", "OSC20", "OSC40")
 
 png(paste0(outfiles, "/Fn_vs_timeincycle.png"),
      width = 960, height = 480)
-par(mai = c(0.5,0.5,0.1,0.1),
-    oma = c(3, 3, 0, 0))
+par(mai = c(0.5,0.4,0.1,0.1),
+    oma = c(3, 2.5, 0, 0))
 layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
        widths = c(1, 1, 2, 4))
 
 for(i in 1:length(exps)){
-  dat <- exps[[i]]
-  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
-  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  dat <- exps[[i]] # get data for exp from main list
+  rep1sup <- dat %>%
+    dplyr::filter(exprep == 1)
+  start.row <- min(which(rep1sup$cycle==2)) # index of first row of first complete cycle (only for rep 1, as only needs calc once)
+  end.row <- max(which(rep1sup$cycle==2)) # index of last row of first complete cycle
   cycle.len <- (end.row + 1) - start.row
   # blank axes
   plot(0:max(unique(dat$time_in_cycle)),
@@ -778,16 +1060,21 @@ for(i in 1:length(exps)){
     text(cycle.len/4, 0.06, "H-S", cex = 2)
     text(cycle.len/2 + cycle.len/4, 0.06, "0-S", cex = 2)
   }
-
-
-  # add lines for each cycle
-  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
-    lines(c(0,
-            abs(dat$time_in_cycle)[dat$cycle == j]),
-          c((dat$new_area_normby_t2_fan * 100)[dat$cycle == (j-1) & dat$time_in_cycle == cycle.len],
-            (dat$new_area_normby_t2_fan * 100)[dat$cycle == j]),
-          #lwd = 0.5,
-          col = alpha(colz2[i], alphas[i]))
+  
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
+    
+    # add lines for each cycle
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0,
+              abs(dat_i$time_in_cycle)[dat_i$cycle == j]),
+            c((dat_i$new_area_normby_t2_fan * 100)[dat_i$cycle == (j-1) & dat_i$time_in_cycle == cycle.len],
+              (dat_i$new_area_normby_t2_fan * 100)[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(colz2[i], alphas[i]))
+    }
   }
 
   # get mean for group; add to plot
@@ -799,26 +1086,33 @@ for(i in 1:length(exps)){
         lwd = 2)
 
   # annotations
-  Run.no <- paste0("R", dat$run[1])
+  Run.no <- runnames[i]
 
   if(i == 4){
-    legend("topright",
-           bty = "n",
+    legend("topleft",
+           box.col = 'white',
            legend = c("Single cycle", "Ensemble mean"),
            lwd = c(1, 2),
            col = c(alpha(colz2[i], 0.4), darken(colz2[i], amount = 0.4, space = "combined")),
-           title = Run.no,
            text.font = 3,
-           cex = 2
+           cex = 2,
+           bg = 'white',
+           inset = 0.01
     )
-  } else {
-    legend("topright",
-           bty = "n",
-           legend = NA,
-           title = Run.no,
-           cex = 2
-    )
-  }
+  } 
+  legend("topright",
+         box.col = 'white',
+         legend = c(format(signif(mean(dat$new_area_normby_t2_fan * 100), 2), nsmall = 1), 
+                    signif(sd(dat$new_area_normby_t2_fan * 100),2)),
+         title.font = 1,
+         title.col = 'black',
+         text.font = c(2, 3),
+         text.col = colz2[i],
+         title = Run.no,
+         cex = 2,
+         bg = 'white',
+         inset = 0.01
+  )
 }
 mtext(side = 1, text = "Time in cycle (mins)",
       outer = T, line = 0, cex = 1.5)
@@ -1149,7 +1443,7 @@ Binary where channel = 1, "dry" = 0.
 ```{r aggregate_wbs, eval = FALSE}
 # This step completed already (code just here for record keeping)
 runz <- c(1, 6:9)
-repz <- c(2, rep(1, 4))
+repz <- c(2, rep(1, 4)) 
 drivez <- c(drive1, rep(drive2, 4))
 
 for (j in 1:length(runz)){
@@ -1190,7 +1484,7 @@ for (j in 1:length(runz)){
                 overwrite = TRUE)
     print(paste0(t, " is done!"))
   }
-  print(paste0("Run ", run, " is done!"))
+  print(paste0("Run ", run, " rep ", repe, " is done!"))
 }
 
 ```
@@ -1521,6 +1815,7 @@ for(i in c("high", "low")){
 ```
 
 ```{r plot_sum, eval = T}
+# do you actually use this plot?
 runs <- 6:9
 repe <- 1
 drive <- drive2
@@ -1577,33 +1872,41 @@ dev.off()
 ### Number of channels
 
 ```{r cross-section data wrangling 0.5 m,eval=T}
+#----
 # empty list
 mylist <- list()
 
 # vector of runs/reps/drives
 runs <- c(1, 6, 7, 8, 9)
-repz <- c(2, 1, 1, 1, 1)
+repz <- c(3, 1, 1, 1, 1)
 drives <- c(drive1, rep(drive2, 4))
+runnames <- c("CON", "OSC10LA",   "OSC10", "OSC20", "OSC40")
 
 # radius of cross-section
 rad <- 0.5
 
 for(i in 1:length(runs)){
   run <- runs[i]
-  repe <- repz[i]
+  nreps <- repz[i]
   drive <- drives[i]
   
   if(i == 2){
-    df <- NULL
-  } else {
-    # import channelization data as df - note whether WBS or WBSC!
-  df <- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
+    next
+  }
+  
+  df_all <- data.frame()
+  for(repnum in 1:nreps){
+    repe <- repnum
+# import channelization data as df - note whether WBS or WBSC!
+  df<- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
                         "_rep", repe,
                         "/_1min_intervals/t_series/cross-section-analyses/Run", run,
                         "_rep", repe, "_", rad, "m_dividedness_from_wbsc.csv")) %>%
-    mutate(t_min = t_sec/60)
-
-# divide into high/low feed minute periods (coded so that high feed is START):
+    mutate(t_min = t_sec/60) %>%
+    mutate(t_hr = t_min / 60) %>%
+    mutate(exprep = repe)
+  
+  # divide into high/low feed minute periods (coded so that high feed is START):
   if(run < 8){
     df <- df %>%
       mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
@@ -1623,27 +1926,44 @@ for(i in 1:length(runs)){
       mutate(run = run) %>%
       mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
   }
-  }
+  df_all <- rbind(df_all, df)
+}
+df <- df_all
 
-  
-  
-  # save df to list
-  mylist[[i]] <- df
+# save df to list
+mylist[[i]] <- df
+
+#export clean versions for FRDR
+cleandata <- df %>%
+  dplyr::select(tvec, dividedness, t_sec,t_min,t_hr, 
+                cycle, time_in_cycle, run, exprep) %>%
+  rename(time_step_hhmm_format = tvec, time_in_sec = t_sec,
+         time_in_min = t_min, time_in_hrs = t_hr,
+         num_channels = dividedness, min_in_cycle = time_in_cycle) 
+write.csv(cleandata, 
+          file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, 
+                        "_rep", repe,
+                        "/_1min_intervals/t_series/cross-section-analyses/Run", 
+                        run, "_all_repeats_n_chan_0.5m.csv"), row.names = F)
 }
 
 
+
+#-----
 # 2) plot
 png(paste0(outfiles, "/n_chann_0.5m_vs_timeincycle.png"),
      width = 960, height = 480)
-par(mai = c(0.5,0.5,0.1,0.1),
-    oma = c(3, 3, 0, 0))
+par(mai = c(0.5,0.4,0.1,0.1),
+    oma = c(3, 2.5, 0, 0))
 layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
        widths = c(1, 1, 2, 4))
 
 for(i in c(1, 3:5)){
   dat <- mylist[[i]]
-  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
-  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  rep1sup <- dat %>%
+    dplyr::filter(exprep == 1)
+  start.row <- min(which(rep1sup$cycle==2)) # index of first row of first complete cycle (only for rep 1, as only needs calc once)
+  end.row <- max(which(rep1sup$cycle==2)) # index of last row of first complete cycle
   cycle.len <- (end.row + 1) - start.row
   # blank axes
   plot(0:max(unique(dat$time_in_cycle)),
@@ -1667,16 +1987,21 @@ for(i in c(1, 3:5)){
     text(cycle.len/2 + cycle.len/4, 0.12, "0-S", cex = 2)
   }
 
-
-  # add lines for each cycle
-  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
-    lines(c(0,
-            abs(dat$time_in_cycle)[dat$cycle == j]),
-          c(abs(dat$dividedness)[dat$cycle == (j-1) &
-                                    dat$time_in_cycle == cycle.len],
-            abs(dat$dividedness)[dat$cycle == j]),
-          #lwd = 0.5,
-          col = alpha(colz[i], 0.4))
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
+    
+    # add lines for each cycle
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0,
+              abs(dat_i$time_in_cycle)[dat_i$cycle == j]),
+            c(abs(dat_i$dividedness)[dat_i$cycle == (j-1) &
+                                     dat_i$time_in_cycle == cycle.len],
+              abs(dat_i$dividedness)[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(colz[i], alphas[i]))
+    }
   }
 
   # get mean for group; add to plot
@@ -1688,26 +2013,33 @@ for(i in c(1, 3:5)){
         lwd = 2)
 
   # annotations
-  Run.no <- paste0("R", dat$run[1])
+  Run.no <- runnames[i]
 
   if(i == 5){
-    legend("topright",
-           bty = "n",
+    legend("topleft",
+           box.col = 'white',
            legend = c("Single cycle", "Ensemble mean"),
            lwd = c(1, 2),
-           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
-           title = Run.no,
+           col = c(alpha(colz[i], 0.4), darken(colz[i], amount = 0.4, space = "combined")),
            text.font = 3,
-           cex = 2
+           cex = 2,
+           bg = 'white',
+           inset = 0.01
     )
-  } else {
-    legend("topright",
-           bty = "n",
-           legend = NA,
-           title = Run.no,
-           cex = 2
-    )
-  }
+  } 
+  legend("topright",
+         box.col = 'white',
+         legend = c(signif(mean(dat$dividedness), 2), 
+                    format(signif(sd(dat$dividedness),2), nsmall = 1)),
+         title.font = 1,
+         title.col = 'black',
+         text.font = c(2, 3),
+         text.col = colz[i],
+         title = Run.no,
+         cex = 2,
+         bg = 'white',
+         inset = 0.01
+  )
 }
 mtext(side = 1, text = "Time in cycle (mins)",
       outer = T, line = 0, cex = 1.5)
@@ -1725,52 +2057,87 @@ mylist <- list()
 
 # vector of runs/reps/drives
 runs <- c(1, 6, 7, 8, 9)
-repz <- c(2, 1, 1, 1, 1)
+repz <- c(3, 1, 1, 1, 1)
 drives <- c(drive1, rep(drive2, 4))
+runnames <- c("CON", "OSC10LA",   "OSC10", "OSC20", "OSC40")
 
 # radius of cross-section
 rad <- 1
 
 for(i in 1:length(runs)){
-  run <- runs[i]
-  repe <- repz[i]
+  run <- runs[i] 
+  nreps <- repz[i]
   drive <- drives[i]
-
-  # import channelization data as df - note whether WBS or WBSC!
-  df <- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
-                        "_rep", repe,
-                        "/_1min_intervals/t_series/cross-section-analyses/Run", run,
-                        "_rep", repe, "_", rad, "m_dividedness_from_wbsc.csv")) %>%
-    mutate(t_min = t_sec/60)
-
-# divide into high/low feed minute periods (coded so that high feed is START):
-  if(run < 8){
-    df <- df %>%
-      mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
-      mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
-      mutate(run = run) %>%
-      mutate(feed = ifelse(time_in_cycle > 5, "low", "high"))
-  } else if(run == 8){
-    df <- df %>%
-      mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
-      mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
-      mutate(run = run) %>%
-      mutate(feed = ifelse(time_in_cycle > 10, "low", "high"))
-  } else if(run == 9){
-    df <- df %>%
-      mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
-      mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
-      mutate(run = run) %>%
-      mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
+  
+  df_all <- data.frame()
+  for(repnum in 1:nreps){
+    repe <- repnum
+    
+    # import channelization data as df - note whether WBS or WBSC!
+    df <- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
+                          "_rep", repe,
+                          "/_1min_intervals/t_series/cross-section-analyses/Run", run,
+                          "_rep", repe, "_", rad, "m_dividedness_from_wbsc.csv")) %>%
+      mutate(t_min = t_sec/60) %>%
+      mutate(t_hr = t_min / 60) %>%
+      mutate(exprep = repe)
+    
+    # divide into high/low feed minute periods (coded so that high feed is START):
+    if(run < 8){
+      df <- df %>%
+        mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 5, "low", "high"))
+    } else if(run == 8){
+      df <- df %>%
+        mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 10, "low", "high"))
+    } else if(run == 9){
+      df <- df %>%
+        mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
+    } 
+    df_all <- rbind(df_all, df)
+    
   }
+  df <- df_all
   
   # save df to list
   mylist[[i]] <- df
+  
+  #export clean versions for FRDR
+  # number of channels
+  cleandata <- df %>%
+    dplyr::select(tvec, dividedness, t_sec,t_min,t_hr, 
+                  cycle, time_in_cycle, run, exprep) %>%
+    rename(time_step_hhmm_format = tvec, time_in_sec = t_sec,
+           time_in_min = t_min, time_in_hrs = t_hr,
+           num_channels = dividedness, min_in_cycle = time_in_cycle) 
+  write.csv(cleandata, 
+            file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, 
+                          "_rep", repe,
+                          "/_1min_intervals/t_series/cross-section-analyses/Run", 
+                          run, "_all_repeats_n_chan_1m.csv"), row.names = F)
+  # active sector
+  cleandata <- df %>%
+    dplyr::select(tvec, ch_sector, t_sec,t_min,t_hr, 
+                  cycle, time_in_cycle, run, exprep) %>%
+    rename(time_step_hhmm_format = tvec, time_in_sec = t_sec,
+           time_in_min = t_min, time_in_hrs = t_hr,
+           active_sector_width_m = ch_sector,
+           min_in_cycle = time_in_cycle) 
+  write.csv(cleandata, 
+            file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, 
+                          "_rep", repe,
+                          "/_1min_intervals/t_series/cross-section-analyses/Run", 
+                          run, "_all_repeats_active_sector_1m.csv"), row.names = F)
 }
-
 ```
-
-
 
 
 Plot through time (cycles superimposed)
@@ -1858,15 +2225,17 @@ Plot through time (cycles superimposed)
 # 2) Duration case
 png(paste0(outfiles, "/n_chann_vs_timeincycle.png"),
      width = 960, height = 480)
-par(mai = c(0.5,0.5,0.1,0.1),
-    oma = c(3, 3, 0, 0))
+par(mai = c(0.5,0.4,0.1,0.1),
+    oma = c(3, 2.5, 0, 0))
 layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
        widths = c(1, 1, 2, 4))
 
 for(i in c(1, 3:5)){
   dat <- mylist[[i]]
-  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
-  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  rep1sup <- dat %>%
+    dplyr::filter(exprep == 1)
+  start.row <- min(which(rep1sup$cycle==2)) # index of first row of first complete cycle (only for rep 1, as only needs calc once)
+  end.row <- max(which(rep1sup$cycle==2)) # index of last row of first complete cycle
   cycle.len <- (end.row + 1) - start.row
   # blank axes
   plot(0:max(unique(dat$time_in_cycle)),
@@ -1874,7 +2243,7 @@ for(i in c(1, 3:5)){
        type = "n",
        xlab = "",
        ylab = "",
-       ylim = c(0, 15),
+       ylim = c(0, 18),
        cex.axis = 2,
        xaxt = "n")
   axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
@@ -1890,16 +2259,20 @@ for(i in c(1, 3:5)){
     text(cycle.len/2 + cycle.len/4, 0.12, "0-S", cex = 2)
   }
 
-
-  # add lines for each cycle
-  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
-    lines(c(0,
-            abs(dat$time_in_cycle)[dat$cycle == j]),
-          c(abs(dat$dividedness)[dat$cycle == (j-1) &
-                                    dat$time_in_cycle == cycle.len],
-            abs(dat$dividedness)[dat$cycle == j]),
-          #lwd = 0.5,
-          col = alpha(colz[i], 0.4))
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
+    # add lines for each cycle
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0,
+              abs(dat_i$time_in_cycle)[dat_i$cycle == j]),
+            c(abs(dat_i$dividedness)[dat_i$cycle == (j-1) &
+                                     dat_i$time_in_cycle == cycle.len],
+              abs(dat_i$dividedness)[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(colz[i], alphas[i]))
+    }
   }
 
   # get mean for group; add to plot
@@ -1911,26 +2284,33 @@ for(i in c(1, 3:5)){
         lwd = 2)
 
   # annotations
-  Run.no <- paste0("R", dat$run[1])
+  Run.no <- runnames[i]
 
   if(i == 5){
-    legend("topright",
-           bty = "n",
+    legend("topleft",
+           box.col = 'white',
            legend = c("Single cycle", "Ensemble mean"),
            lwd = c(1, 2),
-           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
-           title = Run.no,
+           col = c(alpha(colz[i], 0.4), darken(colz[i], amount = 0.4, space = "combined")),
            text.font = 3,
-           cex = 2
+           cex = 2,
+           bg = 'white',
+           inset = 0.01
     )
-  } else {
-    legend("topright",
-           bty = "n",
-           legend = NA,
-           title = Run.no,
-           cex = 2
-    )
-  }
+  } 
+  legend("topright",
+         box.col = 'white',
+         legend = c(signif(mean(dat$dividedness), 2), 
+                    format(signif(sd(dat$dividedness),2), nsmall = 1)),
+         title.font = 1,
+         title.col = 'black',
+         text.font = c(2, 3),
+         text.col = colz[i],
+         title = Run.no,
+         cex = 2,
+         bg = 'white',
+         inset = 0.01
+  )
 }
 mtext(side = 1, text = "Time in cycle (mins)",
       outer = T, line = 0, cex = 1.5)
@@ -2086,15 +2466,17 @@ Plot through time (cycles superimposed)
 # 2) Duration case
 png(paste0(outfiles, "/active_sector_vs_timeincycle.png"),
      width = 960, height = 480)
-par(mai = c(0.5,0.5,0.1,0.1),
-    oma = c(3, 3, 0, 0))
+par(mai = c(0.5,0.4,0.1,0.1),
+    oma = c(3, 2.5, 0, 0))
 layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
        widths = c(1, 1, 2, 4))
 
 for(i in c(1, 3:5)){
   dat <- mylist[[i]]
-  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
-  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  rep1sup <- dat %>%
+    dplyr::filter(exprep == 1)
+  start.row <- min(which(rep1sup$cycle==2)) # index of first row of first complete cycle (only for rep 1, as only needs calc once)
+  end.row <- max(which(rep1sup$cycle==2)) # index of last row of first complete cycle
   cycle.len <- (end.row + 1) - start.row
   # blank axes
   plot(0:max(unique(dat$time_in_cycle)),
@@ -2102,7 +2484,7 @@ for(i in c(1, 3:5)){
        type = "n",
        xlab = "",
        ylab = "",
-       ylim = c(0, 1.7),
+       ylim = c(0, 1.88),
        cex.axis = 2,
        xaxt = "n")
   axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
@@ -2118,16 +2500,20 @@ for(i in c(1, 3:5)){
     text(cycle.len/2 + cycle.len/4, 0.05, "0-S", cex = 2)
   }
 
-
-  # add lines for each cycle
-  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
-    lines(c(0,
-            abs(dat$time_in_cycle)[dat$cycle == j]),
-          c(abs(dat$ch_sector)[dat$cycle == (j-1) &
-                                    dat$time_in_cycle == cycle.len],
-            abs(dat$ch_sector)[dat$cycle == j]),
-          #lwd = 0.5,
-          col = alpha(colz[i], 0.4))
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
+    # add lines for each cycle
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0,
+              abs(dat_i$time_in_cycle)[dat_i$cycle == j]),
+            c(abs(dat_i$ch_sector)[dat_i$cycle == (j-1) &
+                                     dat_i$time_in_cycle == cycle.len],
+              abs(dat_i$ch_sector)[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(colz[i], alphas[i]))
+    }
   }
 
   # get mean for group; add to plot
@@ -2139,26 +2525,33 @@ for(i in c(1, 3:5)){
         lwd = 2)
 
   # annotations
-  Run.no <- paste0("R", dat$run[1])
+  Run.no <- runnames[i]
 
   if(i == 5){
-    legend("topright",
-           bty = "n",
+    legend("topleft",
+           box.col = 'white',
            legend = c("Single cycle", "Ensemble mean"),
            lwd = c(1, 2),
-           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
-           title = Run.no,
+           col = c(alpha(colz[i], 0.4), darken(colz[i], amount = 0.4, space = "combined")),
            text.font = 3,
-           cex = 2
+           cex = 2,
+           bg = 'white',
+           inset = 0.01
     )
-  } else {
-    legend("topright",
-           bty = "n",
-           legend = NA,
-           title = Run.no,
-           cex = 2
-    )
-  }
+  } 
+  legend("topright",
+         box.col = 'white',
+         legend = c(format(signif(mean(dat$ch_sector), 2), nsmall = 2), 
+                    format(signif(sd(dat$ch_sector),2), nsmall = 2)),
+         title.font = 1,
+         title.col = 'black',
+         text.font = c(2, 3),
+         text.col = colz[i],
+         title = Run.no,
+         cex = 2,
+         bg = 'white',
+         inset = 0.01
+  )
 }
 mtext(side = 1, text = "Time in cycle (mins)",
       outer = T, line = 0, cex = 1.5)
@@ -2235,56 +2628,78 @@ mylist <- list()
 
 # vector of runs/reps/drives
 runs <- c(1, 6, 7, 8, 9)
-repz <- c(2, 1, 1, 1, 1)
+repz <- c(3, 1, 1, 1, 1)
 drives <- c(drive1, rep(drive2, 4))
+runnames <- c("CON", "OSC10LA",   "OSC10", "OSC20", "OSC40")
 
 for(i in 1:length(runs)){
-  run <- runs[i]
-  repe <- repz[i]
+  run <- runs[i] 
+  nreps <- repz[i]
   drive <- drives[i]
-
-  # import channelization data as df
-  df <- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
-                        "_rep", repe, "/_1min_intervals/t_series/Run", run, 
-                        "_rep", repe, ".csv")) %>%
-
-  # append with time stamps
-    dplyr::select(-X) %>%
-    mutate(t_h = ifelse((time %% 100) == 0, 
-                        time / 100, floor (time / 100))) %>% # get hour
-    mutate(t_m = ifelse((time %% 100) == 0, 0, time - t_h * 100)) %>% # get minute
-    mutate(time2 = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
-    mutate(time2 = hm(time2)) %>% # convert to time format using lubridate
-    mutate(t_sec = period_to_seconds(
-      time2)) %>% # Convert to number of seconds since start
-    mutate(t_min = t_sec / 60) %>% # time in minutes
-    mutate(t_hr = t_min / 60) %>% # time in hours
-    dplyr::select(-time2, -t_h, -t_m) # remove unnecessary columns
-
   
-  # divide into high/low feed minute periods (coded so that high feed is START):
-  if(run < 8){
-    df <- df %>%
-      mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
-      mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
-      mutate(run = run) %>%
-      mutate(feed = ifelse(time_in_cycle > 5, "low", "high"))
-  } else if(run == 8){
-    df <- df %>%
-      mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
-      mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
-      mutate(run = run) %>%
-      mutate(feed = ifelse(time_in_cycle > 10, "low", "high"))
-  } else if(run == 9){
-    df <- df %>%
-      mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
-      mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
-      mutate(run = run) %>%
-      mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
+  df_all <- data.frame()
+  for(repnum in 1:nreps){
+    repe <- repnum
+    
+    # import channelization data as df
+    df <- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
+                          "_rep", repe, "/_1min_intervals/t_series/Run", run, 
+                          "_rep", repe, ".csv")) %>%
+      
+      # append with time stamps
+      dplyr::select(-X) %>%
+      mutate(t_h = ifelse((time %% 100) == 0, 
+                          time / 100, floor (time / 100))) %>% # get hour
+      mutate(t_m = ifelse((time %% 100) == 0, 0, time - t_h * 100)) %>% # get minute
+      mutate(time2 = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
+      mutate(time2 = hm(time2)) %>% # convert to time format using lubridate
+      mutate(t_sec = period_to_seconds(
+        time2)) %>% # Convert to number of seconds since start
+      mutate(t_min = t_sec / 60) %>% # time in minutes
+      mutate(t_hr = t_min / 60) %>% # time in hours
+      dplyr::select(-time2, -t_h, -t_m) %>% # remove unnecessary columns
+      mutate(exprep = repe)
+    
+    # divide into high/low feed minute periods (coded so that high feed is START):
+    if(run < 8){
+      df <- df %>%
+        mutate(cycle = ceiling((t_min - 715) / 10)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 705 - 10 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 5, "low", "high"))
+    } else if(run == 8){
+      df <- df %>%
+        mutate(cycle = ceiling((t_min - 710) / 20)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 690 - 20 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 10, "low", "high"))
+    } else if(run == 9){
+      df <- df %>%
+        mutate(cycle = ceiling((t_min - 700) / 40)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 660 - 40 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
+    }
+    df_all <- rbind(df_all, df)
+    
   }
+  df <- df_all
   
   # save df to list
   mylist[[i]] <- df
+  
+  #export clean versions for FRDR
+  cleandata <- df %>%
+    dplyr::select(time, wet.area, fan.area, wet.fraction, t_sec,t_min,t_hr, 
+                  cycle, time_in_cycle, exprep) %>%
+    rename(time_step_hhmm_format = time, time_in_sec = t_sec,
+           time_in_min = t_min, time_in_hrs = t_hr, min_in_cycle = time_in_cycle,
+           wet.area.m = wet.area, fan.area.m = fan.area) 
+  write.csv(cleandata, 
+            file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, 
+                          "_rep", repe,
+                          "/_1min_intervals/t_series/Run", 
+                          run, "_all_repeats_wet_frac.csv"), row.names = F)
 }
 
 ```
@@ -2374,15 +2789,17 @@ Plot through time (cycles superimposed)
 # 2) Duration case
 png(paste0(outfiles, "/wetfrac_vs_timeincycle.png"),
      width = 960, height = 480)
-par(mai = c(0.5,0.5,0.1,0.1),
-    oma = c(3, 3, 0, 0))
+par(mai = c(0.5,0.4,0.1,0.1),
+    oma = c(3, 2.5, 0, 0))
 layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
        widths = c(1, 1, 2, 4))
 
 for(i in c(1, 3:5)){
   dat <- mylist[[i]]
-  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
-  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  rep1sup <- dat %>%
+    dplyr::filter(exprep == 1)
+  start.row <- min(which(rep1sup$cycle==2)) # index of first row of first complete cycle (only for rep 1, as only needs calc once)
+  end.row <- max(which(rep1sup$cycle==2)) # index of last row of first complete cycle
   cycle.len <- (end.row + 1) - start.row
   # blank axes
   plot(0:max(unique(dat$time_in_cycle)), 
@@ -2390,7 +2807,7 @@ for(i in c(1, 3:5)){
        type = "n",
        xlab = "",
        ylab = "",
-       ylim = c(0.1, 0.3),
+       ylim = c(0.105, 0.311),
        cex.axis = 2,
        xaxt = "n")
   axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
@@ -2406,16 +2823,20 @@ for(i in c(1, 3:5)){
     text(cycle.len/2 + cycle.len/4, 0.12, "0-S", cex = 2)
   }
   
-  
-  # add lines for each cycle
-  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
-    lines(c(0,
-            abs(dat$time_in_cycle)[dat$cycle == j]), 
-          c(abs(dat$wet.fraction)[dat$cycle == (j-1) & 
-                                    dat$time_in_cycle == cycle.len],
-            abs(dat$wet.fraction)[dat$cycle == j]),
-          #lwd = 0.5,
-          col = alpha(colz[i], 0.4))
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
+    # add lines for each cycle
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0,
+              abs(dat_i$time_in_cycle)[dat_i$cycle == j]),
+            c(abs(dat_i$wet.fraction)[dat_i$cycle == (j-1) &
+                                     dat_i$time_in_cycle == cycle.len],
+              abs(dat_i$wet.fraction)[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(colz[i], alphas[i]))
+    }
   }
   
   # get mean for group; add to plot
@@ -2427,26 +2848,33 @@ for(i in c(1, 3:5)){
         lwd = 2)
   
   # annotations
-  Run.no <- paste0("R", dat$run[1])
+  Run.no <- runnames[i]
   
   if(i == 5){
-    legend("topright",
-           bty = "n",
+    legend("topleft",
+           box.col = 'white',
            legend = c("Single cycle", "Ensemble mean"),
            lwd = c(1, 2),
-           col = c(alpha(colz[i], 0.6), darken(colz[i], amount = 0.4, space = "combined")),
-           title = Run.no,
+           col = c(alpha(colz[i], 0.4), darken(colz[i], amount = 0.4, space = "combined")),
            text.font = 3,
-           cex = 2
+           cex = 2,
+           bg = 'white',
+           inset = 0.01
     )
-  } else {
-    legend("topright",
-           bty = "n",
-           legend = NA,
-           title = Run.no,
-           cex = 2
-    )
-  }
+  } 
+  legend("topright",
+         box.col = 'white',
+         legend = c(format(signif(mean(dat$wet.fraction), 2), nsmall = 2), 
+                    signif(sd(dat$wet.fraction),1)),
+         title.font = 1,
+         title.col = 'black',
+         text.font = c(2, 3),
+         text.col = colz[i],
+         title = Run.no,
+         cex = 2,
+         bg = 'white',
+         inset = 0.01
+  )
 }
 
 mtext(side = 1, text = "Time in cycle (mins)",
@@ -2693,73 +3121,95 @@ deg.outlier.thresh <- -400
 
 # vector of runs/reps/drives
 runs <- c(1, 6, 7, 8, 9)
-repz <- c(2, 1, 1, 1, 1)
+repz <- c(3, 1, 1, 1, 1)
+runnames <- c("CON", "OSC10LA",   "OSC10", "OSC20", "OSC40")
 drives <- c(drive1, rep(drive2, 4))
 
 for(i in 1:length(runs)){
-  run <- runs[i]
-  repe <- repz[i]
+  run <- runs[i] 
+  nreps <- repz[i]
   drive <- drives[i]
+  
+  df_all <- data.frame()
+  for(repnum in 1:nreps){
+    repe <- repnum
 
-  # import erosion/deposition data as df
-  df <- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
-                        "_rep", repe, 
-                        "/_1min_intervals/t_series/Run", run, 
-                        "_rep", repe, "_agg_deg_vols.csv")) %>%
-
-  # append with time stamps
-    mutate(t_h = ifelse((t1 %% 100) == 0, 
-                        t1 / 100, floor (t1 / 100))) %>% # get hour
-    mutate(t_m = ifelse((t1 %% 100) == 0, 0, t1 - t_h * 100)) %>% # get minute
-    mutate(time2 = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
-    mutate(time2 = hm(time2)) %>% # convert to time format using lubridate
-    mutate(t_sec = period_to_seconds(
-      time2)) %>% # Convert to number of seconds since start
-    mutate(t_min = t_sec / 60) %>% # time in minutes
-    mutate(t_hr = t_min / 60) %>% # time in hours
-    mutate(t2 = lead(t1)) %>% # get t2 timestamp for later DoD raster importing
-    dplyr::select(-time2, -t_h, -t_m) # remove unnecessary columns
-  
-  # convert agg/deg vols from m3 to cm3
-  df$agg <- df$agg * 1e+6
-  df$deg <- df$deg * 1e+6
-  
-  # remove outliers
-  df$agg[df$agg > agg.outlier.thresh] <- NA
-  df$deg[df$deg < deg.outlier.thresh] <- NA
-  
-  # compute M (gross morphologic change) in cm3
-  df$M <- df$agg + abs(df$deg)
-  # compute NM (net morphologic change) in cm3
-  df$NM <- df$agg + df$deg
-
-  
-  # divide into high/low feed minute periods (coded so that high feed is START):
-  # slightly diff from Fn as change assigned to FIRST timestep in pair, not second
-  if(run < 8){
-    df <- df %>%
-      mutate(cycle = ceiling((t_min - 714) / 10)) %>% # assign cycle
-      mutate(time_in_cycle = t_min - 704 - 10 * cycle) %>% # assign minute in cycle
-      mutate(run = run) %>%
-      mutate(feed = ifelse(time_in_cycle > 5, "low", "high"))
-  
-  } else if(run == 8){
-    df <- df %>%
-      mutate(cycle = ceiling((t_min - 709) / 20)) %>% # assign cycle
-      mutate(time_in_cycle = t_min - 689 - 20 * cycle) %>% # assign minute in cycle
-      mutate(run = run) %>%
-      mutate(feed = ifelse(time_in_cycle > 10, "low", "high"))
+    # import erosion/deposition data as df
+    df <- read.csv(paste0(drive, ":/Experiments/Processing/Run", run, "/Run", run,
+                          "_rep", repe, 
+                          "/_1min_intervals/t_series/Run", run, 
+                          "_rep", repe, "_agg_deg_vols.csv")) %>%
+      
+      # append with time stamps
+      mutate(t_h = ifelse((t1 %% 100) == 0, 
+                          t1 / 100, floor (t1 / 100))) %>% # get hour
+      mutate(t_m = ifelse((t1 %% 100) == 0, 0, t1 - t_h * 100)) %>% # get minute
+      mutate(time2 = paste(t_h, t_m, sep = ":")) %>%    # concatenate to hh:mm format
+      mutate(time2 = hm(time2)) %>% # convert to time format using lubridate
+      mutate(t_sec = period_to_seconds(
+        time2)) %>% # Convert to number of seconds since start
+      mutate(t_min = t_sec / 60) %>% # time in minutes
+      mutate(t_hr = t_min / 60) %>% # time in hours
+      mutate(t2 = lead(t1)) %>% # get t2 timestamp for later DoD raster importing
+      dplyr::select(-time2, -t_h, -t_m) %>% # remove unnecessary columns
+      mutate(exprep = repe)
     
-  } else if(run == 9){
-    df <- df %>%
-      mutate(cycle = ceiling((t_min - 699) / 40)) %>% # assign cycle
-      mutate(time_in_cycle = t_min - 659 - 40 * cycle) %>% # assign minute in cycle
-      mutate(run = run) %>%
-      mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
+    # convert agg/deg vols from m3 to cm3
+    df$agg <- df$agg * 1e+6
+    df$deg <- df$deg * 1e+6
+    
+    # remove outliers
+    df$agg[df$agg > agg.outlier.thresh] <- NA
+    df$deg[df$deg < deg.outlier.thresh] <- NA
+    
+    # compute M (gross morphologic change) in cm3
+    df$M <- df$agg + abs(df$deg)
+    # compute NM (net morphologic change) in cm3
+    df$NM <- df$agg + df$deg
+    
+    
+    # divide into high/low feed minute periods (coded so that high feed is START):
+    # slightly diff from Fn as change assigned to FIRST timestep in pair, not second
+    if(run < 8){
+      df <- df %>%
+        mutate(cycle = ceiling((t_min - 714) / 10)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 704 - 10 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 5, "low", "high"))
+      
+    } else if(run == 8){
+      df <- df %>%
+        mutate(cycle = ceiling((t_min - 709) / 20)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 689 - 20 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 10, "low", "high"))
+      
+    } else if(run == 9){
+      df <- df %>%
+        mutate(cycle = ceiling((t_min - 699) / 40)) %>% # assign cycle
+        mutate(time_in_cycle = t_min - 659 - 40 * cycle) %>% # assign minute in cycle
+        mutate(run = run) %>%
+        mutate(feed = ifelse(time_in_cycle > 20, "low", "high"))
+    }
+    df_all <- rbind(df_all, df)
+    
   }
+  df <- df_all
   
   # save df to list
   mylist[[i]] <- df
+  
+  #export clean versions for FRDR
+  cleandata <- df %>%
+    dplyr::select(t1, agg, deg, t_min,t_hr, 
+                  cycle, time_in_cycle, exprep) %>%
+    rename(time_step_at_t1 = t1, deposition_cm3 = agg, erosion_cm3 = deg, 
+           time_in_min = t_min, time_in_hrs = t_hr, min_in_cycle = time_in_cycle) 
+  write.csv(cleandata, 
+            file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, 
+                          "_rep", repe, "/_1min_intervals/t_series/Run", 
+                          run, "_all_repeats_deposition_erosion_cm3.csv"), 
+            row.names = F)
 }
 
 # list to df for joining
@@ -2775,15 +3225,17 @@ rdbu <- RColorBrewer::brewer.pal(3,"RdBu")
 
 png(paste0(outfiles, "/aggdeg_vs_timeincycle.png"),
      width = 960, height = 480)
-par(mai = c(0.5,0.5,0.1,0.1),
-    oma = c(3, 3, 0, 0))
+par(mai = c(0.5,0.4,0.1,0.1),
+    oma = c(3, 2.5, 0, 0))
 layout(matrix(c(1,2,3,4), 1, 4, byrow = TRUE),
        widths = c(1, 1, 2, 4))
 
 for(i in c(1, 3:5)){
   dat <- mylist[[i]]
-  start.row <- min(which(dat$cycle==2)) # index of first row of first complete cycle
-  end.row <- max(which(dat$cycle==2)) # index of last row of first complete cycle
+  rep1sup <- dat %>%
+    dplyr::filter(exprep == 1)
+  start.row <- min(which(rep1sup$cycle==2)) # index of first row of first complete cycle (only for rep 1, as only needs calc once)
+  end.row <- max(which(rep1sup$cycle==2)) # index of last row of first complete cycle
   cycle.len <- (end.row + 1) - start.row
   # blank axes
   plot(0:max(unique(dat$time_in_cycle)),
@@ -2806,47 +3258,53 @@ for(i in c(1, 3:5)){
     text(cycle.len/4, -3, "H-S", cex = 2)
     text(cycle.len/2 + cycle.len/4, -3, "0-S", cex = 2)
   }
-
-
-  # add lines for each cycle - agg
-  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
-    lines(c(0,
-            abs(dat$time_in_cycle)[dat$cycle == j]),
-          c(abs(dat$agg)[dat$cycle == (j-1) & dat$time_in_cycle == cycle.len],
-            abs(dat$agg)[dat$cycle == j]),
-          #lwd = 0.5,
-          col = alpha(rdbu[length(rdbu)], 0.5)) # blue for agg
+  
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
+    # add lines for each cycle - agg
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0,
+              abs(dat_i$time_in_cycle)[dat_i$cycle == j]),
+            c(abs(dat_i$agg)[dat_i$cycle == (j-1) & dat_i$time_in_cycle == cycle.len],
+              abs(dat_i$agg)[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(rdbu[length(rdbu)], alphas[i])) # blue for agg
+    }
   }
-
-  # get mean for group; add to plot - agg
-  df2 = group_by(dat, time_in_cycle)
-  df2m = summarize(df2, meanz = mean(abs(agg), na.rm = T))
-  lines(0:cycle.len,
-        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
-        col = darken(rdbu[length(rdbu)], amount = 0.4, space = "combined"),
-        lwd = 2)
   
   # rep prev 2 steps for deg:
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
     # add lines for each cycle 
-  for (j in 2:(max(dat$cycle) - 1)){ # prune out incomplete cycles
-    lines(c(0,
-            abs(dat$time_in_cycle)[dat$cycle == j]),
-          c(abs(dat$deg)[dat$cycle == (j-1) & dat$time_in_cycle == cycle.len],
-            abs(dat$deg)[dat$cycle == j]),
-          #lwd = 0.5,
-          col = alpha(rdbu[1], 0.5)) # red for deg
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0,
+              abs(dat_i$time_in_cycle)[dat_i$cycle == j]),
+            c(abs(dat_i$deg)[dat_i$cycle == (j-1) & dat_i$time_in_cycle == cycle.len],
+              abs(dat_i$deg)[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(rdbu[1], alphas[i])) # red for deg
+    }
   }
 
   # get mean for group; add to plot 
   df2 = group_by(dat, time_in_cycle)
-  df2m = summarize(df2, meanz = mean(abs(deg), na.rm = T))
+  df2a = summarize(df2, meanz = mean(abs(agg), na.rm = T))
   lines(0:cycle.len,
-        c(pull(df2m[cycle.len, 2]), pull(df2m[,2])),
+        c(pull(df2a[cycle.len, 2]), pull(df2a[,2])),
+        col = darken(rdbu[length(rdbu)], amount = 0.4, space = "combined"),
+        lwd = 2)
+  df2d = summarize(df2, meanz = mean(abs(deg), na.rm = T))
+  lines(0:cycle.len,
+        c(pull(df2d[cycle.len, 2]), pull(df2d[,2])),
         col = darken(rdbu[1], amount = 0.4, space = "combined"),
         lwd = 2)
 
   # annotations
-  Run.no <- paste0("R", dat$run[1])
+  Run.no <- runnames[i]
 
   if(i == 5){
     legend("topright",
@@ -2858,6 +3316,7 @@ for(i in c(1, 3:5)){
                    alpha(rdbu[1], 0.5)),
            title = Run.no,
            text.font = 3,
+           title.font = 1,
            cex = 2
     )
   } else {
@@ -2879,6 +3338,162 @@ mtext(text = expression("Deposition or erosion volume (cm"^3*")"),
 
 dev.off()
 ```
+
+```{r aggdeg_sep, echo = F}
+
+png(paste0(outfiles, "/aggdeg_vs_timeincycle_sep_panels.png"),
+     width = 960, height = 960)
+par(mai = c(0.5,0.4,0.1,0.1),
+    oma = c(3, 2.5, 0, 0))
+layout(matrix(1:8, 2, 4, byrow = FALSE),
+       widths = c(1, 1, 2, 4))
+
+for(i in c(1, 3:5)){
+  dat <- mylist[[i]]
+  rep1sup <- dat %>%
+    dplyr::filter(exprep == 1)
+  start.row <- min(which(rep1sup$cycle==2)) # index of first row of first complete cycle (only for rep 1, as only needs calc once)
+  end.row <- max(which(rep1sup$cycle==2)) # index of last row of first complete cycle
+  cycle.len <- (end.row + 1) - start.row
+  # blank axes
+  plot(0:max(unique(dat$time_in_cycle)),
+       dat$agg[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 690),
+       cex.axis = 2,
+       xaxt = "n")
+  axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
+
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, -3, "H-S", cex = 2)
+    text(cycle.len/2 + cycle.len/4, -3, "0-S", cex = 2)
+  }
+  
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
+    # add lines for each cycle - agg
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0,
+              abs(dat_i$time_in_cycle)[dat_i$cycle == j]),
+            c(abs(dat_i$agg)[dat_i$cycle == (j-1) & dat_i$time_in_cycle == cycle.len],
+              abs(dat_i$agg)[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(colz[i], alphas[i])) # blue for agg
+    }
+  }
+  
+  # get mean for group; add to plot 
+  df2 = group_by(dat, time_in_cycle)
+  df2a = summarize(df2, meanz = mean(abs(agg), na.rm = T))
+  lines(0:cycle.len,
+        c(pull(df2a[cycle.len, 2]), pull(df2a[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+  
+    # annotations
+  Run.no <- runnames[i]
+  
+  if(i == 5){
+    legend("topleft",
+           box.col = 'white',
+           legend = c("Single cycle", "Ensemble mean"),
+           lwd = c(1, 2),
+           col = c(alpha(colz[i], 0.4), darken(colz[i], amount = 0.4, space = "combined")),
+           text.font = 3,
+           cex = 2,
+           bg = 'white',
+           inset = 0.01
+    )
+  } 
+  legend("topright",
+         box.col = 'white',
+         legend = c(signif(mean(dat$agg, na.rm = T), 3), 
+                    signif(sd(dat$agg, na.rm = T),2)),
+         title.font = 1,
+         title.col = 'black',
+         text.font = c(2, 3),
+         text.col = colz[i],
+         title = Run.no,
+         cex = 2,
+         bg = 'white',
+         inset = 0.01
+  )
+  
+  # rep prev steps for deg:
+  plot(0:max(unique(dat$time_in_cycle)),
+       dat$deg[(start.row-1):end.row],
+       type = "n",
+       xlab = "",
+       ylab = "",
+       ylim = c(0, 690),
+       cex.axis = 2,
+       xaxt = "n")
+  axis(1, at = seq(0, max(dat$time_in_cycle), by = 5), cex.axis = 2, padj = 0.2)
+
+  # line to delineate low/high feed
+  if(unique(dat$run)>1){
+    abline(v = 0.5, lty = 2,
+           col = "gray80")
+    abline(v = cycle.len/2 + 0.5, lty = 2,
+           col = "gray50")
+    # labels
+    text(cycle.len/4, -3, "H-S", cex = 2)
+    text(cycle.len/2 + cycle.len/4, -3, "0-S", cex = 2)
+  }
+  
+  nrep <- length(unique(dat$exprep))
+  for(eachrep in 1:nrep){
+    dat_i <- dat %>%
+      dplyr::filter(exprep == eachrep)
+    # add lines for each cycle 
+    for (j in 2:(max(dat_i$cycle) - 1)){ # prune out incomplete cycles
+      lines(c(0,
+              abs(dat_i$time_in_cycle)[dat_i$cycle == j]),
+            c(abs(dat_i$deg)[dat_i$cycle == (j-1) & dat_i$time_in_cycle == cycle.len],
+              abs(dat_i$deg)[dat_i$cycle == j]),
+            #lwd = 0.5,
+            col = alpha(colz[i], alphas[i])) # red for deg
+    }
+  }
+  
+  df2d = summarize(df2, meanz = mean(abs(deg), na.rm = T))
+  lines(0:cycle.len,
+        c(pull(df2d[cycle.len, 2]), pull(df2d[,2])),
+        col = darken(colz[i], amount = 0.4, space = "combined"),
+        lwd = 2)
+
+  legend("topright",
+         box.col = 'white',
+         legend = c(signif(mean(abs(dat$deg), na.rm = T), 2), 
+                    signif(sd(dat$deg, na.rm = T),2)),
+         text.font = c(2, 3),
+         text.col = colz[i],
+         cex = 2,
+         bg = 'white',
+         inset = 0.01
+  )
+}
+
+mtext(side = 1, text = "Time in cycle (mins)",
+      outer = T, line = 0,
+      cex = 1.5)
+mtext(text = expression("Erosion volume (cm"^3*")                                                           Deposition volume (cm"^3*")"), 
+      side = 2, outer = T, line = -0.2,
+      cex = 1.5)
+
+dev.off()
+```
+
 
 Deposition:
 
@@ -4125,6 +4740,7 @@ for(i in c("high", "low")){
 ```{r plot_DoD_mean}
 runs <- c(1, 7:9)
 repes <- c(2, rep(1, 3))
+runnames <- c("CON",   "OSC10", "OSC20", "OSC40")
 drives <- c(drive1, rep(drive2, 3))
 
 # png(paste0(outfiles, "/spatial_erosion_deposition.png"),
@@ -4177,11 +4793,11 @@ for(i in c("high", "low")){
     
     # title
     if(run == 1){
-      title(main = "           Run 1, half data",
+      title(main = "              CON, half data",
           line = -1,
           cex.main = 1)
     } else {
-      title(main = paste0("           Run ", run, " ", i, " supply"),
+      title(main = paste0("              ", runnames[j], ", ", i, " supply"),
           line = -1,
           cex.main = 1)
     }
