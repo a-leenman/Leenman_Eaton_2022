@@ -7,8 +7,10 @@
 # comments added 14 March 2022... why didn't past me think this was important!!
 #---------------------------------------
 # Housekeeping
-drive <- "E"
-run <- 7
+rm(list = ls())
+
+drive <- "D"
+run <- 9
 repe <- 1
 
 library(raster)
@@ -98,13 +100,15 @@ write.csv(out_df, file = paste0("./t_series/Run", run, "rep", repe,
 minz <- apply(out_df, 2, min) # the 2 signifies "column" (Vs row)
 meanz <- colMeans(out_df, na.rm = F)
 maxz <- apply(out_df, 2, max) # the 2 signifies "column" (Vs row)
+sdz <- apply(out_df, 2, sd)
 
-summary_df <- as.data.frame(rbind(minz, meanz, maxz)) %>%
-  select(-t_step, -t_h, -t_m, -time, -t_sec) # why am I time wrangling? Huh.
+
+summary_df <- as.data.frame(rbind(minz, meanz, maxz, sdz)) %>%
+  select(-t_step) 
 
 write.csv(summary_df, file = paste0("./t_series/Run", run, "rep", repe, 
                                     "_trenching_depths_in_mm_summary_data.csv"), 
-          row.names = F)
+          row.names = T)
 
 # then some time wrangling:
 out_df <- mutate(out_df, t_h = floor(t_step/100)) %>% # get hour
