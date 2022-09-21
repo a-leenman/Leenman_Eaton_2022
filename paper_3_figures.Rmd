@@ -23,6 +23,8 @@ library(raster)
 library(RStoolbox)
 library(tidyr)
 
+write_data_out <- FALSE # should clean datasets be written for Zenodo upload?
+
 drive1 <- "E"
 drive2 <- "D"
 
@@ -253,17 +255,20 @@ slope_df <- bind_rows(slope_dat) #%>%
 #export clean versions for FRDR
 runs <- c(1,6,7,8,9)
 drives <- c(drive1, rep(drive2, 4))
-for(r_num in 1:length(runs)){
-  run <- runs[r_num]
-  drive <- drives[r_num]
-  cleandata <- slope_dat[[r_num]] %>%
-    dplyr::select(tvec, slope_50pc, t_sec,t_min,t_hr, run, exprep)%>%
-    rename(median_slope = slope_50pc, time_step_hhmm_format = tvec, time_in_sec = t_sec,
-           time_in_min = t_min, time_in_hrs = t_hr) %>%
-    mutate(median_slope = median_slope * -1)
-  write.csv(cleandata, file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, "/_1min_intervals/t_series/Recalculating_slope/Run", run, 
-                    "_all_repeats_slope.csv"), row.names = F)
+if(write_data_out == T){
+  for(r_num in 1:length(runs)){
+    run <- runs[r_num]
+    drive <- drives[r_num]
+    cleandata <- slope_dat[[r_num]] %>%
+      dplyr::select(tvec, slope_50pc, t_sec,t_min,t_hr, run, exprep)%>%
+      rename(median_slope = slope_50pc, time_step_hhmm_format = tvec, time_in_sec = t_sec,
+             time_in_min = t_min, time_in_hrs = t_hr) %>%
+      mutate(median_slope = median_slope * -1)
+    write.csv(cleandata, file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, "/_1min_intervals/t_series/Recalculating_slope/Run", run, 
+                                       "_all_repeats_slope.csv"), row.names = F)
+  }
 }
+
 ```
 
 Comparing temporal trends in median slope:
@@ -665,19 +670,22 @@ for(i in 1:length(runs)){
   mylist[[i]] <- df
   
   #export clean versions for FRDR
-  cleandata <- df %>%
-    dplyr::select(tvec, t_sec,t_min,t_hr, 
-                  cycle, time_in_cycle, run, exprep,
-                  p45, flank_av_slope, ax_minus_flank) %>%
-    rename(time_step_hhmm_format = tvec, time_in_sec = t_sec,
-           time_in_min = t_min, time_in_hrs = t_hr, min_in_cycle = time_in_cycle,
-           flank_gradient = flank_av_slope, axial_gradient = p45, gradient_difference = ax_minus_flank) 
-  write.csv(cleandata, 
-            file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, 
-                          "_rep", repe,
-                          "/_1min_intervals/t_series/Recalculating_slope/Run", 
-                          run, "_all_repeats_flank_vs_axial_slope.csv"), row.names = F)
+  if(write_data_out == T){
+    cleandata <- df %>%
+      dplyr::select(tvec, t_sec,t_min,t_hr, 
+                    cycle, time_in_cycle, run, exprep,
+                    p45, flank_av_slope, ax_minus_flank) %>%
+      rename(time_step_hhmm_format = tvec, time_in_sec = t_sec,
+             time_in_min = t_min, time_in_hrs = t_hr, min_in_cycle = time_in_cycle,
+             flank_gradient = flank_av_slope, axial_gradient = p45, gradient_difference = ax_minus_flank) 
+    write.csv(cleandata, 
+              file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, 
+                            "_rep", repe,
+                            "/_1min_intervals/t_series/Recalculating_slope/Run", 
+                            run, "_all_repeats_flank_vs_axial_slope.csv"), row.names = F)
+  }
 }
+  
 ```
 
 ```{r axial_vs_flank_plot, echo = F}
@@ -857,21 +865,25 @@ fn_df <- bind_rows(fn_list) #%>%
 runs <- c(1,6,7,8,9)
 repes <- rep(1, 5)
 drives <- c(drive1, rep(drive2, 4))
-for(r_num in 1:length(runs)){
-  run <- runs[r_num]
-  repe <- repes[r_num]
-  drive <- drives[r_num]
-  cleandata <- fn_list[[r_num]] %>%
-    dplyr::select(new_area_raw, new_area_normby_t2_fan, t_sec,t_min,t_hr, 
-                  cycle, time_in_cycle, time, run, exprep) %>%
-    rename(time_at_t2 = time, time_in_sec = t_sec,
-           time_in_min = t_min, time_in_hrs = t_hr,
-           new_area_m2 = new_area_raw, 
-           new_area_normalized_by_fan_area = new_area_normby_t2_fan, 
-           cycle_number = cycle, min_in_cycle = time_in_cycle) 
-  write.csv(cleandata, file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, "/_1min_intervals/t_series/change_detection/Run", run, 
-                    "_all_repeats_Fn.csv"), row.names = F)
+
+if(write_data_out == T){
+  for(r_num in 1:length(runs)){
+    run <- runs[r_num]
+    repe <- repes[r_num]
+    drive <- drives[r_num]
+    cleandata <- fn_list[[r_num]] %>%
+      dplyr::select(new_area_raw, new_area_normby_t2_fan, t_sec,t_min,t_hr, 
+                    cycle, time_in_cycle, time, run, exprep) %>%
+      rename(time_at_t2 = time, time_in_sec = t_sec,
+             time_in_min = t_min, time_in_hrs = t_hr,
+             new_area_m2 = new_area_raw, 
+             new_area_normalized_by_fan_area = new_area_normby_t2_fan, 
+             cycle_number = cycle, min_in_cycle = time_in_cycle) 
+    write.csv(cleandata, file = paste0(drive, "://Experiments/Processing/Run", run, "/Run", run, "_rep", repe, "/_1min_intervals/t_series/change_detection/Run", run, 
+                                       "_all_repeats_Fn.csv"), row.names = F)
+  }
 }
+
 ```
 
 Comparing temporal trends in newly inundated area (Fn), expressed as a percentage of fan area:
@@ -2112,7 +2124,8 @@ for(i in 1:length(runs)){
   
   #export clean versions for FRDR
   # number of channels
-  cleandata <- df %>%
+  if(write_data_out == T){
+    cleandata <- df %>%
     dplyr::select(tvec, dividedness, t_sec,t_min,t_hr, 
                   cycle, time_in_cycle, run, exprep) %>%
     rename(time_step_hhmm_format = tvec, time_in_sec = t_sec,
@@ -2136,6 +2149,8 @@ for(i in 1:length(runs)){
                           "_rep", repe,
                           "/_1min_intervals/t_series/cross-section-analyses/Run", 
                           run, "_all_repeats_active_sector_1m.csv"), row.names = F)
+  }
+  
 }
 ```
 
@@ -2689,7 +2704,8 @@ for(i in 1:length(runs)){
   mylist[[i]] <- df
   
   #export clean versions for FRDR
-  cleandata <- df %>%
+  if(write_data_out == T){
+    cleandata <- df %>%
     dplyr::select(time, wet.area, fan.area, wet.fraction, t_sec,t_min,t_hr, 
                   cycle, time_in_cycle, exprep) %>%
     rename(time_step_hhmm_format = time, time_in_sec = t_sec,
@@ -2700,6 +2716,8 @@ for(i in 1:length(runs)){
                           "_rep", repe,
                           "/_1min_intervals/t_series/Run", 
                           run, "_all_repeats_wet_frac.csv"), row.names = F)
+  }
+  
 }
 
 ```
@@ -3200,7 +3218,8 @@ for(i in 1:length(runs)){
   mylist[[i]] <- df
   
   #export clean versions for FRDR
-  cleandata <- df %>%
+  if(write_data_out == T){
+    cleandata <- df %>%
     dplyr::select(t1, agg, deg, t_min,t_hr, 
                   cycle, time_in_cycle, exprep) %>%
     rename(time_step_at_t1 = t1, deposition_cm3 = agg, erosion_cm3 = deg, 
@@ -3210,6 +3229,8 @@ for(i in 1:length(runs)){
                           "_rep", repe, "/_1min_intervals/t_series/Run", 
                           run, "_all_repeats_deposition_erosion_cm3.csv"), 
             row.names = F)
+  }
+  
 }
 
 # list to df for joining
@@ -3395,10 +3416,15 @@ for(i in c(1, 3:5)){
   # get mean for group; add to plot 
   df2 = group_by(dat, time_in_cycle)
   df2a = summarize(df2, meanz = mean(abs(agg), na.rm = T))
+  df2d = summarize(df2, meanz = mean(abs(deg), na.rm = T))
   lines(0:cycle.len,
         c(pull(df2a[cycle.len, 2]), pull(df2a[,2])),
         col = darken(colz[i], amount = 0.4, space = "combined"),
         lwd = 2)
+  lines(0:cycle.len,
+        c(pull(df2d[cycle.len, 2]), pull(df2d[,2])),
+        col = 'black',
+        lty = 3, lwd = 2)
   
     # annotations
   Run.no <- runnames[i]
@@ -3406,9 +3432,11 @@ for(i in c(1, 3:5)){
   if(i == 5){
     legend("topleft",
            box.col = 'white',
-           legend = c("Single cycle", "Ensemble mean"),
-           lwd = c(1, 2),
-           col = c(alpha(colz[i], 0.4), darken(colz[i], amount = 0.4, space = "combined")),
+           legend = c("Single cycle", "Ensemble mean", "Corresp. mean"),
+           lwd = c(1, 2, 2),
+           lty = c(1, 1, 3),
+           col = c(alpha(colz[i], 0.4), darken(colz[i], amount = 0.4, space = "combined"),
+                   'black'),
            text.font = 3,
            cex = 2,
            bg = 'white',
@@ -3466,11 +3494,14 @@ for(i in c(1, 3:5)){
     }
   }
   
-  df2d = summarize(df2, meanz = mean(abs(deg), na.rm = T))
   lines(0:cycle.len,
         c(pull(df2d[cycle.len, 2]), pull(df2d[,2])),
         col = darken(colz[i], amount = 0.4, space = "combined"),
         lwd = 2)
+  lines(0:cycle.len,
+        c(pull(df2a[cycle.len, 2]), pull(df2a[,2])),
+        col = 'black',
+        lty = 3, lwd = 2)
 
   legend("topright",
          box.col = 'white',
@@ -4923,6 +4954,54 @@ abline(mod)
 legend("bottomright", legend = paste0("R.squ = ", summary(mod)$adj.r.squared))
 
 
+```
+
+Now plotting sample image of each fan against its QR code (as per Fiona Clubb's suggestion for revision 2):
+
+```{r}
+# housekeeping
+runs <- c(1, 7:9)
+repes <- c(2, rep(1, 3))
+runnames <- c("CON",   "OSC10", "OSC20", "OSC40")
+drives <- c(drive1, rep(drive2, 3))
+QR_codes <- c('run1_rep2_QR.png', 'run7_QR.png', 'run8_QR.png', 'run9_QR.png')
+
+# set key timestamps
+cycle_len = c(5, 5, 10, 20) # length of high or low supply period
+start_time = 1200 # timestamp to start at 
+# set up plot
+png(paste0(outfiles, "/QR_codes.png"),
+     width = 7, 5, units = 'in', res = 600, type = 'cairo')
+par(mfcol = c(3,4),
+    oma = c(2,2,0,0),
+    mai = rep(0.2, 4))
+# for each run
+for(i in 1:4){
+  t_low <- as.character(start_time + cycle_len[i])
+  t_high <- start_time + 2 * cycle_len[i]
+  ortho_dir <- paste0(drives[i], ':/Experiments/Processing/Run', runs[i], '/Run', runs[i], '_rep', repes[i],'/_1min_intervals/orthomosaics')
+  ortho_list <- list.files(ortho_dir)
+  ortho_high_name <- unlist(lapply(ortho_list, function(ch) grep(t_high, ch, value = TRUE)))
+  ortho_high <- brick(paste0(ortho_dir, '/', ortho_high_name ))
+  plotRGB(ortho_high)
+  if(i == 1){
+    mtext('High supply', side = 2)
+  }
+  ortho_low_name <- unlist(lapply(ortho_list, function(ch) grep(t_low, ch, value = TRUE)))
+  ortho_low <- brick(paste0(ortho_dir, '/', ortho_low_name ))
+  plotRGB(ortho_low)
+  if(i == 1){
+    mtext('Zero supply', side = 2)
+  }
+  QR <- raster(paste0(outfiles, '/', QR_codes[i]))
+  # par(mai = c(1,1,1,1))
+  image(QR, axes = F, legend = F, col = c('black', 'white'))
+  if(i == 1){
+    mtext('Time-lapse', side = 2)
+  }
+  mtext(paste0('Run ', runnames[i]), side = 1)
+}
+dev.off()
 ```
 
 # To do: 
